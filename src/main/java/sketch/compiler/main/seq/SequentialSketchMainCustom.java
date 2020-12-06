@@ -20,17 +20,22 @@ public class SequentialSketchMainCustom {
         System.out.println("Running Custom Sketch main...");
         if (args.length != 3)
             throw new IllegalArgumentException("CUSTOM SKETCH: Error invalid # args " + args.length);
-        String componentsFile = args[1];
-        String grammarFile = args[2];
+        String componentsFile = args[0];
+        String grammarFile = args[1];
+        int k = Integer.parseInt(args[2]);
+        System.out.printf("CUSTOM SKETCH: Components file = %s, Grammar file = %s \n", componentsFile, grammarFile);
         TempVarGen varGenComponents = new TempVarGen();
         TempVarGen varGenGrammar = new TempVarGen();
-        System.out.printf("CUSTOM SKETCH: Components file = %s, Grammar file = %s \n", componentsFile, grammarFile);
         CommonSketchMain componentsOption = new CommonSketchMain(new SketchOptions(new String[]{componentsFile}));
         CommonSketchMain grammarOption = new CommonSketchMain(new SketchOptions(new String[]{grammarFile}));
         System.out.println("Parsing components...");
         Program componentsProg = (new ParseProgramStage(varGenComponents, componentsOption.options)).visitProgram(null);
         Program grammarProg = (new ParseProgramStage(varGenGrammar, grammarOption.options)).visitProgram(null);
-        
+        System.out.println(" --------------- Components Program ---------------");
+        System.out.println(componentsProg.toString());
+        System.out.println(" --------------- Grammar Program ------------------");
+        System.out.println(grammarProg.toString());
+
     }
 
     public static void go(String[] args) {
