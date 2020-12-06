@@ -7,6 +7,8 @@ import sketch.compiler.main.PlatformLocalization;
 import sketch.compiler.main.cmdline.SketchOptions;
 import sketch.compiler.main.other.ErrorHandling;
 import sketch.compiler.main.passes.ParseProgramStage;
+import sketch.compiler.main.seq.mindepthUtils.ComponentArguments;
+import sketch.compiler.main.seq.mindepthUtils.ComponentArgumentsHoisting;
 import sketch.util.exceptions.SketchException;
 
 import java.util.*;
@@ -17,6 +19,7 @@ public class SequentialSketchMainCustom {
 
     public static boolean isTest = false;
     // copied over from FEReplacer.java in compiler.ast.core
+
     static class FunctionAppender extends FEReplacer {
         public Object visitPackage(Package spec)
         {
@@ -116,6 +119,10 @@ public class SequentialSketchMainCustom {
         System.out.println("Trying the new FEVisitor pass for grammar...");
         grammarProg = (Program) grammarProg.accept(new FunctionAppender());
         System.out.println(grammarProg.toString());
+        System.out.println(" --------------------------------------------------");
+        System.out.println("Analyzing each component...");
+        ComponentArguments componentArgs = (ComponentArguments) componentsProg.accept(new ComponentArgumentsHoisting());
+        componentArgs.print();
     }
 
     public static void go(String[] args) {
