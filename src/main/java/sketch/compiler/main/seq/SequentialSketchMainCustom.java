@@ -2,7 +2,12 @@ package sketch.compiler.main.seq;
 
 import sketch.compiler.ast.core.*;
 import sketch.compiler.ast.core.Package;
+import sketch.compiler.ast.core.stmts.StmtAssert;
+import sketch.compiler.ast.core.stmts.StmtBlock;
+import sketch.compiler.ast.core.stmts.StmtReturn;
 import sketch.compiler.ast.core.typs.StructDef;
+import sketch.compiler.ast.core.typs.Type;
+import sketch.compiler.ast.core.typs.TypePrimitive;
 import sketch.compiler.main.PlatformLocalization;
 import sketch.compiler.main.cmdline.SketchOptions;
 import sketch.compiler.main.other.ErrorHandling;
@@ -18,81 +23,30 @@ public class SequentialSketchMainCustom {
 
 
     public static boolean isTest = false;
-    // copied over from FEReplacer.java in compiler.ast.core
 
-    static class FunctionAppender extends FEReplacer {
-        public Object visitPackage(Package spec)
-        {
+    static Function.FunctionCreator makeHarness(FEContext ctx) {
+        return new Function.FunctionCreator(ctx).type(Function.FcnType.Harness);
+    }
 
-            if (nres != null)
-                nres.setPackage(spec);
+    static Function.FunctionCreator makeGenerator(FEContext ctx, List<Parameter> params) {
+        StmtReturn returnBits = new stmtReturn(ctx)
 
-            List<FieldDecl> newVars = new ArrayList<FieldDecl>();
-            List<Function> oldNewFuncs = newFuncs;
-            newFuncs = new ArrayList<Function>();
+        for (Parameter p : params) {
+            if (p.getType().equals(TypePrimitive.bittype)) {
 
-            boolean changed = false;
-
-            for (Iterator iter = spec.getVars().iterator(); iter.hasNext();) {
-                FieldDecl oldVar = (FieldDecl) iter.next();
-                FieldDecl newVar = (FieldDecl) oldVar.accept(this);
-                if (oldVar != newVar)
-                    changed = true;
-                if (newVar != null)
-                    newVars.add(newVar);
             }
-
-            List<StructDef> newStructs = new ArrayList<StructDef>();
-            nstructsInPkg = spec.getStructs().size();
-            for (StructDef tsOrig : spec.getStructs()) {
-                StructDef ts = (StructDef) tsOrig.accept(this);
-                if (ts != tsOrig) {
-                    changed = true;
-                }
-                newStructs.add(ts);
-            }
-            nstructsInPkg = -1;
-
-            int nonNull = 0;
-            for (Iterator<Function> iter = spec.getFuncs().iterator(); iter.hasNext(); )
-            {
-                Function oldFunc = (Function)iter.next();
-                Function newFunc = (Function)oldFunc.accept(this);
-                if (oldFunc != newFunc) changed = true;
-                // if(oldFunc != null)++nonNull;
-                if(newFunc!=null) newFuncs.add(newFunc);
-            }
-
-            if(newFuncs.size() != nonNull){
-                changed = true;
-            }
-
-            Function.FunctionCreator nfCreator = new Function.FunctionCreator(new FEContext(""))
-                                                            .name("customFunctionTest").params(new LinkedList<Parameter>());
-            System.out.println(" FEVisitor Pass: Creating a new function upon visiting package " + spec.getName());
-            /*            this.base = n;
-            this.name = null;
-            this.returnType = TypePrimitive.voidtype;
-            this.params = null;
-            this.body = null;
-            this.implementsName = null;
-            this.fcnInfo = new FcnInfo(FcnType.Static);
-            this.typeParams = new ArrayList<String>();
-            this.fixes = new ArrayList<String>(); */
-            newFuncs.add(nfCreator.create());
-            changed = true;
-
-            List<Function> nf = newFuncs;
-            // newFuncs = oldNewFuncs;
-            if (!changed)
-                return spec;
-            return new Package(spec, spec.getName() + "_CHANGED", newStructs, newVars, nf,
-                    spec.getSpAsserts());
-
         }
     }
 
-    public static void main(String[] args) {
+    static StmtAssert makeAssert(FEContext ctx) {
+
+    }
+
+    static StmtBlock makeAssertArray(FEContext ctx) {
+
+    }
+
+    public static void main(String[] args) throws Exception {
         System.out.println("Running Custom Sketch main...");
         if (args.length != 3)
             throw new IllegalArgumentException("CUSTOM SKETCH: Error invalid # args " + args.length);
@@ -112,17 +66,19 @@ public class SequentialSketchMainCustom {
         System.out.println(" --------------- Grammar Program ------------------");
         System.out.println(grammarProg.toString());
         System.out.println(" --------------------------------------------------");
-        System.out.println("Trying the new FEVisitor pass for components...");
-        componentsProg = (Program) componentsProg.accept(new FunctionAppender());
-        System.out.println("Components program is now: ");
-        System.out.println(componentsProg.toString());
-        System.out.println("Trying the new FEVisitor pass for grammar...");
-        grammarProg = (Program) grammarProg.accept(new FunctionAppender());
-        System.out.println(grammarProg.toString());
-        System.out.println(" --------------------------------------------------");
         System.out.println("Analyzing each component...");
         ComponentArguments componentArgs = (ComponentArguments) componentsProg.accept(new ComponentArgumentsHoisting());
         componentArgs.print();
+        for (ComponentArguments.ArgInComponent comp : componentArgs) {
+            Function.FunctionCreator harnessCreator = makeHarness(new FEContext(componentsFile));
+            if (comp.rty.isArray()) {
+                StmtBlock asserts = makeAssertArray(comp.ctx);
+            } else if (comp.rty.isStruct()) {
+                throw new Exception("Error: Cannot accept a component that returns a struct.");
+            } else {
+                // do assert only.
+            }
+        }
     }
 
     public static void go(String[] args) {

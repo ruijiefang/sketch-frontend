@@ -1,5 +1,7 @@
 package sketch.compiler.main.seq.mindepthUtils;
 
+import sketch.compiler.ast.core.FEContext;
+import sketch.compiler.ast.core.FENode;
 import sketch.compiler.ast.core.Function;
 import sketch.compiler.ast.core.Parameter;
 import sketch.compiler.ast.core.typs.Type;
@@ -16,10 +18,11 @@ public class ComponentArguments implements Iterable<ComponentArguments.ArgInComp
     }
 
     public static class ArgInComponent {
-        String componentName = null;
-        List<Parameter> componentArgs = null;
-        Type rty = null;
-        Function spec = null;
+        public String componentName = null;
+        public List<Parameter> componentArgs = null;
+        public Type rty = null;
+        public FEContext ctx;
+        public Function harness = null;
     }
     private final ArrayList<ArgInComponent> components;
 
@@ -54,6 +57,7 @@ public class ComponentArguments implements Iterable<ComponentArguments.ArgInComp
         a.componentName = f.getName();
         a.componentArgs = new ArrayList<>(parameters);
         a.rty = f.getReturnType();
+        a.ctx = f.getCx();
         add(a);
     }
 
@@ -66,9 +70,9 @@ public class ComponentArguments implements Iterable<ComponentArguments.ArgInComp
                 System.out.println("  | " + p.toString());
             }
             System.out.println(" RetType: " + arg.rty.toString());
-            System.out.println(" Has spec? " + (arg.spec != null));
-            if (arg.spec != null)
-                System.out.println("  | spec: " + arg.spec.toString());
+            System.out.println(" Has spec? " + (arg.harness != null));
+            if (arg.harness != null)
+                System.out.println("  | harness: " + arg.harness.toString());
             System.out.println("}");
         }
     }
