@@ -54,11 +54,11 @@
     </distributionManagement>
 
     <repositories>
-        <repository>
+      <!--<repository>
             <id>uc berkeley cobol</id>
             <name>UC Berkeley Maven2 Repository</name>
             <url>http://ntung.com/mvn</url>
-        </repository>
+      </repository>-->
         <repository>
             <id>mvnrepository</id>
             <name>Mvn Repository</name>
@@ -178,7 +178,7 @@
             </plugin>
 
             <!-- only run JunitTest classes -->
-            <plugin>
+            <!--       <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.14.1</version>
@@ -188,7 +188,7 @@
                     </includes>
                 </configuration>
             </plugin>
-
+              -->
             <!-- execute with -ea -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
