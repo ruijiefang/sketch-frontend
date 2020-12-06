@@ -2,6 +2,7 @@ package sketch.compiler.main.seq;
 
 import sketch.compiler.ast.core.*;
 import sketch.compiler.ast.core.Package;
+import sketch.compiler.ast.core.exprs.regens.ExprRegen;
 import sketch.compiler.ast.core.stmts.StmtAssert;
 import sketch.compiler.ast.core.stmts.StmtBlock;
 import sketch.compiler.ast.core.stmts.StmtReturn;
@@ -21,28 +22,73 @@ import java.util.concurrent.*;
 
 public class SequentialSketchMainCustom {
 
-
+    public static final String MANGLE_HARNESS = "_sketch_harness_";
     public static boolean isTest = false;
 
-    static Function.FunctionCreator makeHarness(FEContext ctx) {
-        return new Function.FunctionCreator(ctx).type(Function.FcnType.Harness);
-    }
+    static class AppendFunctions extends FEReplacer {
 
-    static Function.FunctionCreator makeGenerator(FEContext ctx, List<Parameter> params) {
-        StmtReturn returnBits = new stmtReturn(ctx)
+        private final List<Function> functionsToAppend;
+        private final String pkgName;
 
-        for (Parameter p : params) {
-            if (p.getType().equals(TypePrimitive.bittype)) {
+        public AppendFunctions(List<Function> functionsToAppend, String pkgName) {
+            this.functionsToAppend = functionsToAppend;
+            this.pkgName = pkgName;
+        }
 
-            }
+        /**
+         * StreamSpec represents a namespace. spec.getVars() will get you all the global
+         * variable declarations. spec.getStructs() gets you the structure declarations.
+         * spec.getFuncs() gets you all the function declarations.
+         *
+         * @param spec
+         */
+        @Override
+        public Object visitPackage(Package spec) {
+            if (!spec.getName().equals(pkgName)) return spec;
+            ArrayList<Function> nf = new ArrayList<>();
+            nf.addAll(spec.getFuncs());
+            nf.addAll(functionsToAppend);
+            return new Package(spec, spec.getName(), spec.getStructs(), spec.getVars(), nf,
+                    spec.getSpAsserts());
         }
     }
 
-    static StmtAssert makeAssert(FEContext ctx) {
+    static Function.FunctionCreator makeHarness(FENode ctx) {
+        return new Function.FunctionCreator(ctx).type(Function.FcnType.Harness);
+    }
+
+    static ExprRegen makeSelector(FENode ctx, List<String> args) {
+        StringBuilder argsStr = new StringBuilder();
+        int i = 0;
+        for (String s : args) {
+            argsStr.append(s);
+            if (i != args.size() - 1)
+                argsStr.append("|");
+        }
+        return new ExprRegen(ctx, argsStr.toString());
+    }
+
+    static StmtReturn makeSelectorReturn(FENode ctx, List<String> args) {
+        ExprRegen returnRhs = makeSelector(ctx, args);
+        return new StmtReturn(ctx, returnRhs);
+    }
+
+    static Function mkGenerator(FENode ctx, String pkg, String name, Type rty, List<String> args) {
+        Function.FunctionCreator generatorMaker = new Function.FunctionCreator(ctx)
+                .name(name)
+                .returnType(rty)
+                .type(Function.FcnType.Generator)
+                .params(new ArrayList<Parameter>())
+                .pkg(pkg)
+                .body(makeSelectorReturn(ctx, args));
+        return generatorMaker.create();
+    }
+
+    static StmtAssert makeAssert(FENode ctx) {
 
     }
 
-    static StmtBlock makeAssertArray(FEContext ctx) {
+    static StmtBlock makeAssertArray(FENode ctx) {
 
     }
 
@@ -69,14 +115,31 @@ public class SequentialSketchMainCustom {
         System.out.println("Analyzing each component...");
         ComponentArguments componentArgs = (ComponentArguments) componentsProg.accept(new ComponentArgumentsHoisting());
         componentArgs.print();
+        FENode componentProgramNode = componentsProg.getOrigin();
+        String componentPkg = componentsProg.getPackages().get(0).getName();
         for (ComponentArguments.ArgInComponent comp : componentArgs) {
-            Function.FunctionCreator harnessCreator = makeHarness(new FEContext(componentsFile));
+            Function.FunctionCreator harnessCreator = makeHarness(componentProgramNode).name(MANGLE_HARNESS + comp.componentName);
+            ArrayList<String> intArgs = new ArrayList<>(), bitArgs = new ArrayList<>();
+            for (Parameter par : comp.componentArgs) {
+                if (par.getType().equals(TypePrimitive.bittype))
+                    bitArgs.add(par.getName());
+                else if (par.getType().equals(TypePrimitive.inttype))
+                    intArgs.add(par.getName());
+                else
+                    throw new Exception("Error: Cannot accept a component that accepts anything other than int/bit.");
+            }
+            ArrayList<Function> fns = new ArrayList<>();
+            fns.add(mkGenerator(componentProgramNode, componentPkg, "vars_" + comp.componentName, TypePrimitive.inttype, intArgs));
+            fns.add(mkGenerator(componentProgramNode, componentPkg, "bit_vars_" + comp.componentName, TypePrimitive.bittype, bitArgs));
+            // append the functions for generators.
+            componentsProg = (Program) componentsProg.accept(new AppendFunctions(fns, componentPkg));
             if (comp.rty.isArray()) {
-                StmtBlock asserts = makeAssertArray(comp.ctx);
+                StmtBlock asserts = makeAssertArray(componentProgramNode);
             } else if (comp.rty.isStruct()) {
                 throw new Exception("Error: Cannot accept a component that returns a struct.");
             } else {
                 // do assert only.
+                StmtAssert assst = makeAssert(componentProgramNode);
             }
         }
     }
