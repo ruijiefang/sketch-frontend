@@ -1,20 +1,93 @@
 package sketch.compiler.main.seq;
 
-import sketch.compiler.ast.core.Program;
-import sketch.compiler.ast.core.TempVarGen;
+import sketch.compiler.ast.core.*;
+import sketch.compiler.ast.core.Package;
+import sketch.compiler.ast.core.typs.StructDef;
 import sketch.compiler.main.PlatformLocalization;
 import sketch.compiler.main.cmdline.SketchOptions;
 import sketch.compiler.main.other.ErrorHandling;
 import sketch.compiler.main.passes.ParseProgramStage;
 import sketch.util.exceptions.SketchException;
 
-import java.util.Arrays;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class SequentialSketchMainCustom {
 
 
     public static boolean isTest = false;
+    // copied over from FEReplacer.java in compiler.ast.core
+    static class FunctionAppender extends FEReplacer {
+        public Object visitPackage(Package spec)
+        {
+
+            if (nres != null)
+                nres.setPackage(spec);
+
+            List<FieldDecl> newVars = new ArrayList<FieldDecl>();
+            List<Function> oldNewFuncs = newFuncs;
+            newFuncs = new ArrayList<Function>();
+
+            boolean changed = false;
+
+            for (Iterator iter = spec.getVars().iterator(); iter.hasNext();) {
+                FieldDecl oldVar = (FieldDecl) iter.next();
+                FieldDecl newVar = (FieldDecl) oldVar.accept(this);
+                if (oldVar != newVar)
+                    changed = true;
+                if (newVar != null)
+                    newVars.add(newVar);
+            }
+
+            List<StructDef> newStructs = new ArrayList<StructDef>();
+            nstructsInPkg = spec.getStructs().size();
+            for (StructDef tsOrig : spec.getStructs()) {
+                StructDef ts = (StructDef) tsOrig.accept(this);
+                if (ts != tsOrig) {
+                    changed = true;
+                }
+                newStructs.add(ts);
+            }
+            nstructsInPkg = -1;
+
+            int nonNull = 0;
+            for (Iterator<Function> iter = spec.getFuncs().iterator(); iter.hasNext(); )
+            {
+                Function oldFunc = (Function)iter.next();
+                Function newFunc = (Function)oldFunc.accept(this);
+                if (oldFunc != newFunc) changed = true;
+                // if(oldFunc != null)++nonNull;
+                if(newFunc!=null) newFuncs.add(newFunc);
+            }
+
+            if(newFuncs.size() != nonNull){
+                changed = true;
+            }
+
+            Function.FunctionCreator nfCreator = new Function.FunctionCreator(new FEContext(""))
+                                                            .name("customFunctionTest").params(new LinkedList<Parameter>());
+            System.out.println(" FEVisitor Pass: Creating a new function upon visiting package " + spec.getName());
+            /*            this.base = n;
+            this.name = null;
+            this.returnType = TypePrimitive.voidtype;
+            this.params = null;
+            this.body = null;
+            this.implementsName = null;
+            this.fcnInfo = new FcnInfo(FcnType.Static);
+            this.typeParams = new ArrayList<String>();
+            this.fixes = new ArrayList<String>(); */
+            newFuncs.add(nfCreator.create());
+            changed = true;
+
+            List<Function> nf = newFuncs;
+            // newFuncs = oldNewFuncs;
+            if (!changed)
+                return spec;
+            return new Package(spec, spec.getName() + "_CHANGED", newStructs, newVars, nf,
+                    spec.getSpAsserts());
+
+        }
+    }
 
     public static void main(String[] args) {
         System.out.println("Running Custom Sketch main...");
@@ -35,7 +108,14 @@ public class SequentialSketchMainCustom {
         System.out.println(componentsProg.toString());
         System.out.println(" --------------- Grammar Program ------------------");
         System.out.println(grammarProg.toString());
-
+        System.out.println(" --------------------------------------------------");
+        System.out.println("Trying the new FEVisitor pass for components...");
+        componentsProg = (Program) componentsProg.accept(new FunctionAppender());
+        System.out.println("Components program is now: ");
+        System.out.println(componentsProg.toString());
+        System.out.println("Trying the new FEVisitor pass for grammar...");
+        grammarProg = (Program) grammarProg.accept(new FunctionAppender());
+        System.out.println(grammarProg.toString());
     }
 
     public static void go(String[] args) {
