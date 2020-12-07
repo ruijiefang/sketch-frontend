@@ -5,10 +5,7 @@ import sketch.compiler.ast.core.Package;
 import sketch.compiler.ast.core.exprs.*;
 import sketch.compiler.ast.core.exprs.regens.ExprRegen;
 import sketch.compiler.ast.core.stmts.*;
-import sketch.compiler.ast.core.typs.StructDef;
-import sketch.compiler.ast.core.typs.Type;
-import sketch.compiler.ast.core.typs.TypeFunction;
-import sketch.compiler.ast.core.typs.TypePrimitive;
+import sketch.compiler.ast.core.typs.*;
 import sketch.compiler.main.PlatformLocalization;
 import sketch.compiler.main.cmdline.SketchOptions;
 import sketch.compiler.main.other.ErrorHandling;
@@ -25,6 +22,11 @@ public class SequentialSketchMainCustom {
 
     public static final String MANGLE_HARNESS = "_sketch_harness_";
     public static boolean isTest = false;
+
+    //
+    //  Static analysis passes for doing convenient source-to-source transformations.
+    //  TODO: Keep track of derived instances of FENode subclasses during the analysis passes.
+    //
 
     // Append functions to a given package.
     static class AppendFunctions extends FEReplacer {
@@ -81,6 +83,38 @@ public class SequentialSketchMainCustom {
         }
     }
 
+    // Augment all functions within a package to accept a list of new parameters
+    // on the right.
+    static class AddParametersToAllFunctions extends FEReplacer {
+        private final List<Parameter> newlyAddedParams;
+        private final String packageName;
+        public AddParametersToAllFunctions(List<Parameter> newlyAddedParams, String packageName) {
+            this.packageName = packageName;
+            this.newlyAddedParams = newlyAddedParams;
+        }
+
+        public AddParametersToAllFunctions(Parameter oneParam, String packageName) {
+            this.packageName = packageName;
+            this.newlyAddedParams = new ArrayList<>();
+            this.newlyAddedParams.add(oneParam);
+        }
+
+        @Override
+        public Object visitPackage(Package spec) {
+            if (!spec.getName().equals(this.packageName)) return spec;
+            List<Function> augmentedFuncs = new ArrayList<>();
+            for (Function f : spec.getFuncs()) {
+                List<Parameter> pp = new ArrayList<>();
+                pp.addAll(f.getParams());
+                pp.addAll(this.newlyAddedParams);
+                Function nf = f.creator().params(pp).create();
+                augmentedFuncs.add(nf);
+            }
+            return new Package(spec, spec.getName(), spec.getStructs(), spec.getVars(), augmentedFuncs,
+                    spec.getSpAsserts());
+        }
+    }
+
     // Add a list of new parameters to function calls inside a program,
     // specified by the name of the destination function.
     static class AugmentFunCallsByName extends FEReplacer {
@@ -105,7 +139,7 @@ public class SequentialSketchMainCustom {
     // Adds global variables to a given package.
     static class AddGlobalVariablesToPackage extends FEReplacer {
         private final String packageName;
-        private List<FieldDecl> newFieldsToAdd;
+        private final List<FieldDecl> newFieldsToAdd;
         public AddGlobalVariablesToPackage(String packageName, List<FieldDecl> newFieldsToAdd) {
             this.packageName = packageName;
             this.newFieldsToAdd = newFieldsToAdd;
@@ -161,6 +195,29 @@ public class SequentialSketchMainCustom {
                 .pkg(pkg)
                 .body(makeSelectorReturn(ctx, args));
         return generatorMaker.create();
+    }
+
+    static FieldDecl makeMemoArray(Type t, FENode progCtx, int k) {
+        List<Type> arrType = new ArrayList<>();
+        List<String> name = new ArrayList<>();
+        List emptyList = new ArrayList();
+        arrType.add(new TypeArray(t, new ExprConstInt(k)));
+        if (t.equals(TypePrimitive.inttype))
+            name.add("memoInt");
+        else
+            name.add("memoBit");
+        FieldDecl arr = new FieldDecl(progCtx, arrType, name, emptyList);
+    }
+
+    static Parameter makeMemoArrayParam(FENode funcNode, Type t, int k) {
+        Parameter p;
+        if (t.equals(TypePrimitive.inttype)) {
+            p = new Parameter(funcNode, new TypeArray(t, new ExprConstInt(k)), "memoInt", /* ptype */ Parameter.REF);
+        } else {
+            assert t.equals(TypePrimitive.bittype);
+            p = new Parameter(funcNode, new TypeArray(t, new ExprConstInt(k)), "memoBit", /* ptype */ Parameter.REF);
+        }
+        return p;
     }
 
     static StmtAssert makeAssert(FENode ctx, String funcName, ComponentArguments.ArgInComponent spec,
@@ -239,10 +296,21 @@ public class SequentialSketchMainCustom {
         for (ComponentArguments.ArgInComponent comp : componentArgs) {
             componentFuncs.add(comp.component);
         }
-        grammarProg.accept(new AppendFunctions(componentFuncs, componentsProg.getPackages().get(0).getName()));
-
+        /* package names. */
         String componentPkg = componentsProg.getPackages().get(0).getName();
         String grammarPkg = grammarProg.getPackages().get(0).getName();
+       /* Create memo arrays. */
+        List<FieldDecl> memoArrs = new ArrayList<>();
+        memoArrs.add(makeMemoArray(TypePrimitive.inttype, grammarProg.getOrigin(), k));
+        memoArrs.add(makeMemoArray(TypePrimitive.bittype, grammarProg.getOrigin(), k));
+        grammarProg = (Program) grammarProg.accept(new AddGlobalVariablesToPackage(grammarPkg, memoArrs));
+        /* Add parameter to memo arrays in grammar file. */
+        List<Parameter> memoParams = new ArrayList<>();
+        memoParams.add(makeMemoArrayParam(grammarProg.getOrigin(), TypePrimitive.inttype, k));
+        memoParams.add(makeMemoArrayParam(grammarProg.getOrigin(), TypePrimitive.bittype, k))
+        grammarProg = (Program) grammarProg.accept(new AddParametersToAllFunctions(memoParams, grammarPkg));
+        /* Append components to the grammar file. */
+        grammarProg.accept(new AppendFunctions(componentFuncs, componentsProg.getPackages().get(0).getName()));
         for (ComponentArguments.ArgInComponent comp : componentArgs) {
             Function harness = makeHarness(componentProgramNode).name(MANGLE_HARNESS + comp.componentName).create();
             ArrayList<String> intArgs = new ArrayList<>(), bitArgs = new ArrayList<>();
@@ -267,7 +335,7 @@ public class SequentialSketchMainCustom {
                 // do assert only.
                 // StmtAssert assst = makeAssert(componentProgramNode);
             }
-        } */
+        }
     }
 
     public static void go(String[] args) {

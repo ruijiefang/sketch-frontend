@@ -37,13 +37,14 @@ public class SCP extends FEReplacer
         return super.visitProgram(prog);
     }
 
-    /**
-     * StreamSpec represents a namespace. spec.getVars() will get you all the global
-     * variable declarations. spec.getStructs() gets you the structure declarations.
-     * spec.getFuncs() gets you all the function declarations.
-     *
-     * @param spec
-     */
+    @Override
+    public Object visitFieldDecl(FieldDecl field) {
+        System.out.println("SCP: Visiting field declaration: " + field.toString());
+        System.out.println(" | number of fields: " + field.getNumFields());
+
+        return super.visitFieldDecl(field);
+    }
+
     @Override
     public Object visitPackage(Package spec) {
         System.out.println("SCP: visiting package " + spec.getName());
@@ -53,6 +54,7 @@ public class SCP extends FEReplacer
     @Override
     public Object visitFunction(Function func) {
         System.out.println("SCP: Visiting function " + func.getName());
+        System.out.println(" | function string representation: " + func.toString());
         return super.visitFunction(func);
     }
 
