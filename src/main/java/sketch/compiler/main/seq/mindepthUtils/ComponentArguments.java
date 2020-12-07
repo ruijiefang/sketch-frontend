@@ -23,6 +23,7 @@ public class ComponentArguments implements Iterable<ComponentArguments.ArgInComp
         public Type rty = null;
         public FEContext ctx;
         public Function harness = null;
+        public Function component = null;
     }
     private final ArrayList<ArgInComponent> components;
 
@@ -58,6 +59,7 @@ public class ComponentArguments implements Iterable<ComponentArguments.ArgInComp
         a.componentArgs = new ArrayList<>(parameters);
         a.rty = f.getReturnType();
         a.ctx = f.getCx();
+        a.component = f;
         add(a);
     }
 

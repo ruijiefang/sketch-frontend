@@ -1,0 +1,49 @@
+SCP: visiting program package ANONYMOUS
+   generator int testStar (int a, int b):scp.sk:1
+   harness void test (bit a, bit b, bit c):scp.sk:9
+   harness void testInt (int a, int b, int c):scp.sk:16
+
+SCP: visiting package ANONYMOUS
+SCP: Visiting function testStar
+SCP: Visiting expression star ??/*H__0*/
+SCP: Visiting if/then statement: if(c == 0){
+return a;
+
+}
+
+  does this if/then have an alt?? No
+SCP: Visiting ExprVar c
+SCP: Visiting ExprVar a
+SCP: Visiting ExprVar b
+SCP: Visiting function test
+SCP: Visiting function declaration inside statement of context scp.sk:10
+ SCP: Function is like: generator bit vars ()/*scp.sk:10*/
+SCP: Visiting function vars
+SCP: Visiting ExprRegen {| ((a | b) | c) |}
+ ExprRegen: Nested expression is ((a | b) | c)
+SCP: Visiting ExprVar a
+SCP: Visiting ExprVar b
+SCP: Visiting ExprVar c
+SCP: Visiting assert statement assert ((vars()) == c)
+ StmtAssert: asserting (vars()) == c
+SCP: Visiting function call expression vars
+  SCP: function call parameters are 
+  SCP: Type parameters: NULL
+SCP: Visiting ExprVar c
+SCP: Visiting function testInt
+SCP: Visiting if/then statement: if(b == 4){
+d = 4
+}
+
+  does this if/then have an alt?? No
+SCP: Visiting ExprVar b
+SCP: Visiting ExprVar d
+SCP: Visiting assert statement assert ((testStar(a, c)) == c)
+ StmtAssert: asserting (testStar(a, c)) == c
+SCP: Visiting function call expression testStar
+  SCP: function call parameters are a, c
+  SCP: Type parameters: NULL
+SCP: Visiting ExprVar a
+SCP: Visiting ExprVar c
+SCP: Visiting ExprVar c
+

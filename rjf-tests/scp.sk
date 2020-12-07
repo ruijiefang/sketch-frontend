@@ -1,0 +1,24 @@
+generator int testStar(int a, int b) {
+  int c = ??(3);
+  if (c == 0) {
+    return a;
+  }
+  return b;
+}
+
+harness void test(bit a, bit b, bit c) {
+  generator bit vars() {
+    return {| a | b | c |};
+  }
+  assert vars() == c;
+}
+
+harness void testInt(int a, int b, int c) {
+  int d = 3;
+  if (b == 4) d = 4;
+  assert testStar(a, c) == c;
+}
+
+
+
+
