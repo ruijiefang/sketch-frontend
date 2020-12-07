@@ -57,6 +57,13 @@ public class SCP extends FEReplacer
     }
 
     @Override
+    public Object visitStmtBlock(StmtBlock stmt) {
+        System.out.println("SCP: Visiting statement block " + stmt.toString());
+        System.out.println(" StmtBlock size = " + stmt.size());
+        return super.visitStmtBlock(stmt);
+    }
+
+    @Override
     public Object visitExprRegen(ExprRegen exp) {
         System.out.println("SCP: Visiting ExprRegen " + exp.toString());
         System.out.println(" ExprRegen: Nested expression is " + exp.getExpr().toString());

@@ -4,9 +4,7 @@ import sketch.compiler.ast.core.*;
 import sketch.compiler.ast.core.Package;
 import sketch.compiler.ast.core.exprs.*;
 import sketch.compiler.ast.core.exprs.regens.ExprRegen;
-import sketch.compiler.ast.core.stmts.StmtAssert;
-import sketch.compiler.ast.core.stmts.StmtBlock;
-import sketch.compiler.ast.core.stmts.StmtReturn;
+import sketch.compiler.ast.core.stmts.*;
 import sketch.compiler.ast.core.typs.StructDef;
 import sketch.compiler.ast.core.typs.Type;
 import sketch.compiler.ast.core.typs.TypeFunction;
@@ -18,6 +16,7 @@ import sketch.compiler.main.passes.ParseProgramStage;
 import sketch.compiler.main.seq.mindepthUtils.ComponentArguments;
 import sketch.compiler.main.seq.mindepthUtils.ComponentArgumentsHoisting;
 import sketch.compiler.main.seq.mindepthUtils.SCP;
+import sketch.compiler.parser.RegenParser;
 import sketch.util.exceptions.SketchException;
 import sun.jvm.hotspot.debugger.cdbg.FunctionType;
 
@@ -52,6 +51,39 @@ public class SequentialSketchMainCustom {
         }
     }
 
+    // Create function statements inside a given function.
+    static class AddClosuresToFunction extends FEReplacer {
+        private final List<Function> closuresToAdd;
+        private final String functionName;
+        public AddClosuresToFunction(List<Function> closuresToAdd, String functionName) {
+            this.closuresToAdd = closuresToAdd;
+            this.functionName = functionName;
+        }
+
+        private static List<StmtFunDecl> funToStmt(FEContext ctx, List<Function> funcs) {
+            ArrayList<StmtFunDecl> l = new ArrayList<>();
+            for (Function f : funcs) {
+                StmtFunDecl fdecl = new StmtFunDecl(ctx, f);
+                l.add(fdecl);
+            }
+            return l;
+        }
+
+        @Override
+        public Object visitStmtBlock(StmtBlock stmt) {
+            ArrayList<Statement> newStmts = new ArrayList<>();
+            newStmts.addAll(funToStmt(stmt.getCx(), this.closuresToAdd));
+            newStmts.addAll(stmt.getStmts());
+            return new StmtBlock(stmt, newStmts);
+        }
+
+        @Override
+        public Object visitFunction(Function func) {
+            if (!func.getName().equals(this.functionName)) return func;
+            return super.visitFunction(func);
+        }
+    }
+
     // Add a list of new parameters to function calls inside a program,
     // specified by the name of the destination function.
     static class AugmentFunCallsByName extends FEReplacer {
@@ -82,6 +114,13 @@ public class SequentialSketchMainCustom {
             this.newFieldsToAdd = newFieldsToAdd;
         }
 
+        public AddGlobalVariablesToPackage(String packageName, FieldDecl f) {
+            ArrayList<FieldDecl> l = new ArrayList<>();
+            l.add(f);
+            this.packageName = packageName;
+            this.newFieldsToAdd = l;
+        }
+
         @Override
         public Object visitPackage(Package spec) {
             if (!spec.getName().equals(this.packageName)) return spec;
@@ -105,8 +144,10 @@ public class SequentialSketchMainCustom {
             argsStr.append(s);
             if (i != args.size() - 1)
                 argsStr.append("|");
+            ++i;
         }
-        return new ExprRegen(ctx, argsStr.toString());
+        System.out.println(" makeSelector: argsStr is: " + argsStr.toString());
+        return new ExprRegen(ctx, RegenParser.parse(argsStr.toString()));
     }
 
     static StmtReturn makeSelectorReturn(FENode ctx, List<String> args) {
@@ -157,14 +198,14 @@ public class SequentialSketchMainCustom {
         // We need to find a way to pass in more info (specifically, the type info) of the global memo array.
         return null;
     }
-
+    
     public static void main(String[] args) throws Exception {
         System.out.println("Running Custom Sketch main...");
         if (args.length != 3)
             throw new IllegalArgumentException("CUSTOM SKETCH: Error invalid # args " + args.length);
         String componentsFile = args[0];
         String grammarFile = args[1];
-        int k = Integer.parseInt(args[2]);
+        int k = Integer.parseInt(args[2]); // size of memo table
         System.out.printf("CUSTOM SKETCH: Components file = %s, Grammar file = %s \n", componentsFile, grammarFile);
         TempVarGen varGenComponents = new TempVarGen();
         TempVarGen varGenGrammar = new TempVarGen();
@@ -188,12 +229,25 @@ public class SequentialSketchMainCustom {
             throw new Exception("Error: Components Program contains more than one packages: " + componentsProg.getPackages().size());
         System.out.println(" Components SCP--------------------------------------------------++");
         componentsProg.accept(new SCP());
-        System.out.println(" Grammar SCP-----------------------------------------------------++");
-        grammarProg.accept(new SCP());
-      /*  String componentPkg = componentsProg.getPackages().get(0).getName();
+        System.out.println(" Testing Regen parser-----------------------------------------------------++");
+        List<String> rArgs = new ArrayList<String>();
+        rArgs.add("a");
+        rArgs.add("b");
+        rArgs.add("qwerty");
+        rArgs.add("c");
+        ExprRegen r = makeSelector(componentsProg.getOrigin(), rArgs);
+        System.out.println("made regen: " + r.toString());
+        System.out.println(" | expression value: " + r.getExpr().toString());
+        ArrayList<Function> componentFuncs = new ArrayList<>();
+        for (ComponentArguments.ArgInComponent comp : componentArgs) {
+            componentFuncs.add(comp.component);
+        }
+        grammarProg.accept(new AppendFunctions(componentFuncs, componentsProg.getPackages().get(0).getName()));
+
+        String componentPkg = componentsProg.getPackages().get(0).getName();
         String grammarPkg = grammarProg.getPackages().get(0).getName();
         for (ComponentArguments.ArgInComponent comp : componentArgs) {
-            Function.FunctionCreator harnessCreator = makeHarness(componentProgramNode).name(MANGLE_HARNESS + comp.componentName);
+            Function harness = makeHarness(componentProgramNode).name(MANGLE_HARNESS + comp.componentName).create();
             ArrayList<String> intArgs = new ArrayList<>(), bitArgs = new ArrayList<>();
             for (Parameter par : comp.componentArgs) {
                 if (par.getType().equals(TypePrimitive.bittype))
@@ -204,11 +258,10 @@ public class SequentialSketchMainCustom {
                     throw new Exception("Error: Cannot accept a component that accepts anything other than int/bit.");
             }
             ArrayList<Function> fns = new ArrayList<>();
-            fns.add(comp.component);
-            fns.add(mkGenerator(componentProgramNode, componentPkg, "vars_" + comp.componentName, TypePrimitive.inttype, intArgs));
-            fns.add(mkGenerator(componentProgramNode, componentPkg, "bit_vars_" + comp.componentName, TypePrimitive.bittype, bitArgs));
+            fns.add(mkGenerator(componentProgramNode, componentPkg, "vars", TypePrimitive.inttype, intArgs));
+            fns.add(mkGenerator(componentProgramNode, componentPkg, "bit_vars", TypePrimitive.bittype, bitArgs));
             // append the functions for generators.
-            grammarProg = (Program) grammarProg.accept(new AppendFunctions(fns, componentPkg));
+            harness = (Function) harness.accept(new AddClosuresToFunction(fns, harness.getName()));
             if (comp.rty.isArray()) {
                 // StmtBlock asserts = makeAssertArray(componentProgramNode);
             } else if (comp.rty.isStruct()) {
