@@ -18,9 +18,6 @@ import sketch.compiler.main.seq.mindepthUtils.ComponentArgumentsHoisting;
 import sketch.compiler.main.seq.mindepthUtils.SCP;
 import sketch.compiler.parser.RegenParser;
 import sketch.util.exceptions.SketchException;
-import sun.jvm.hotspot.debugger.cdbg.FunctionType;
-
-import java.lang.reflect.Array;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -198,7 +195,7 @@ public class SequentialSketchMainCustom {
         // We need to find a way to pass in more info (specifically, the type info) of the global memo array.
         return null;
     }
-    
+
     public static void main(String[] args) throws Exception {
         System.out.println("Running Custom Sketch main...");
         if (args.length != 3)
