@@ -292,39 +292,60 @@ public class SequentialSketchMainCustom {
         return p;
     }
 
-    static StmtAssert makeAssert(FENode ctx, String funcName, ComponentArguments.ArgInComponent spec,
-                                 String intGeneratorName, String bitGeneratorName, int depth, Expression memo) {
-        ArrayList<Expression> lhsParams = new ArrayList<>();
-        ArrayList<Expression> rhsParams = new ArrayList<>();
-        // Parameter intGeneratorParam = new Parameter(ctx, TypeFunction.singleton, intGeneratorName);
-        // Parameter bitGeneratorParam = new Parameter(ctx, TypeFunction.singleton, bitGeneratorName);
+    static void makeLhsRhsForAsserts(FENode ctx, ComponentArguments.ArgInComponent spec, String intGeneratorName,
+                                     String bitGeneratorName, List<Expression> lhsParams, List<Expression> rhsParams, int depth) {
         ExprVar intGeneratorVar = new ExprVar(ctx, intGeneratorName);
         ExprVar bitGeneratorVar = new ExprVar(ctx, bitGeneratorName);
         ExprConstInt d = ExprConstInt.createConstant(depth);
         lhsParams.add(intGeneratorVar);
         lhsParams.add(bitGeneratorVar);
         lhsParams.add(d);
-        lhsParams.add(memo);
+        lhsParams.add(new ExprVar(ctx, "memoInt"));
+        lhsParams.add(new ExprVar(ctx, "memoBit"));
+        // the arguments to the rhs call are exactly the parameters in the specification of the component.
+        for (Parameter p : spec.componentArgs)
+            rhsParams.add(new ExprVar(ctx, p.getName()));
+    }
+
+    static StmtAssert makeAssert(FENode ctx, String funcName, ComponentArguments.ArgInComponent spec,
+                                 String intGeneratorName, String bitGeneratorName, int depth) {
+        ArrayList<Expression> lhsParams = new ArrayList<>();
+        ArrayList<Expression> rhsParams = new ArrayList<>();
+        makeLhsRhsForAsserts(ctx, spec, intGeneratorName, bitGeneratorName, lhsParams, rhsParams, depth);
         // the arguments to the rhs call are exactly the parameters in the specification of the component.
         for (Parameter p : spec.componentArgs)
             rhsParams.add(new ExprVar(ctx, p.getName()));
         ExprFunCall lhsCallExpr = new ExprFunCall(ctx, funcName, lhsParams);
-        ExprFunCall rhsCallExpr = new ExprFunCall(ctx, funcName, rhsParams);
+        ExprFunCall rhsCallExpr = new ExprFunCall(ctx, spec.componentName, rhsParams);
         ExprBinary lhsRhsEq = new ExprBinary(ctx, ExprBinary.BINOP_EQ, lhsCallExpr, rhsCallExpr);
         return new StmtAssert(ctx, lhsRhsEq, false);
     }
 
     static StmtBlock makeAssertArray(FENode ctx, String funcName, ComponentArguments.ArgInComponent spec,
-                                     String intGeneratorName, String bitGeneratorName, int depth, Expression memo) {
+                                     String intGeneratorName, String bitGeneratorName, int depth) throws IllegalArgumentException {
         ArrayList<StmtAssert> listOfAsserts = new ArrayList<>();
-        // here is the issue.
-        // to generator an array of assert statements one must know the bounds
-        // of the memo expression, which boils down to an ExprVar instance that points to
-        // the variable name of the global memoization array.
-        // We need to find a way to pass in more info (specifically, the type info) of the global memo array.
-        return null;
+        Type retType = spec.rty;
+        if (!retType.isArray()) throw new IllegalArgumentException("error: makeAssertArray can only be used for multidimensional specs.");
+        TypeArray arrT = (TypeArray) retType;
+        Expression lenExpr = arrT.getLength();
+        if (!(lenExpr instanceof ExprConstInt)) throw new IllegalArgumentException("error: cannot assert spec that returns variable-sized array with bounds unknown: " + lenExpr.toString());
+        int len = ((ExprConstInt) lenExpr).getVal();
+        List<Expression> lhsParams = new ArrayList<>();
+        List<Expression> rhsParams = new ArrayList<>();
+        makeLhsRhsForAsserts(ctx, spec, intGeneratorName, bitGeneratorName, lhsParams, rhsParams, depth);
+        ExprFunCall lhsCallExpr = new ExprFunCall(ctx, funcName, lhsParams);
+        ExprFunCall rhsCallExpr = new ExprFunCall(ctx, spec.componentName, rhsParams);
+        for (int i = 0; i < len; ++i) {
+            ExprArrayRange dimILHS = new ExprArrayRange(lhsCallExpr, new ExprConstInt(ctx, i));
+            ExprArrayRange dimIRHS = new ExprArrayRange(rhsCallExpr, new ExprConstInt(ctx, i));
+            ExprBinary lhsRhsDimIEQ = new ExprBinary(ctx, ExprBinary.BINOP_EQ, dimILHS, dimIRHS);
+            StmtAssert dimIAssert = new StmtAssert(ctx, lhsRhsDimIEQ, false);
+            listOfAsserts.add(dimIAssert);
+        }
+        return new StmtBlock(ctx, listOfAsserts);
     }
 
+    private static final String GNAME = "expr";
     public static void main(String[] args) throws Exception {
         System.out.println("Running Custom Sketch main...");
         if (args.length != 3)
@@ -387,7 +408,7 @@ public class SequentialSketchMainCustom {
         grammarProg.accept(new AppendFunctions(componentFuncs, componentsProg.getPackages().get(0).getName()));
 
         for (ComponentArguments.ArgInComponent comp : componentArgs) {
-            Function harness = makeHarness(componentProgramNode).name(MANGLE_HARNESS + comp.componentName).create();
+            Function harness = makeHarness(componentProgramNode).name(MANGLE_HARNESS + comp.componentName).returnType(comp.rty).create();
             ArrayList<String> intArgs = new ArrayList<>(), bitArgs = new ArrayList<>();
             for (Parameter par : comp.componentArgs) {
                 if (par.getType().equals(TypePrimitive.bittype))
@@ -403,12 +424,15 @@ public class SequentialSketchMainCustom {
             // append the functions for generators.
             harness = (Function) harness.accept(new AddClosuresToFunction(fns, harness.getName()));
             if (comp.rty.isArray()) {
-                StmtBlock asserts = makeAssertArray(componentProgramNode);
+                StmtBlock asserts = makeAssertArray(grammarProg.getOrigin(), GNAME, comp, "vars", "bit_vars", k);
+                harness = harness.creator().body(asserts).create();
             } else if (comp.rty.isStruct()) {
                 throw new Exception("Error: Cannot accept a component that returns a struct.");
             } else {
-                // do assert only.
-                // StmtAssert assst = makeAssert(componentProgramNode);
+                ArrayList<Statement> stBody = new ArrayList<Statement>();
+                stBody.add(makeAssert(grammarProg.getOrigin(), GNAME, comp, "vars", "bit_vars", k));
+                StmtBlock body = new StmtBlock(grammarProg.getOrigin(), stBody);
+                harness = harness.creator().body(asserts).create();
             }
         }
     }
