@@ -321,7 +321,7 @@ public class SequentialSketchMainCustom {
         return new StmtAssert(ctx, lhsRhsEq, false);
     }
 
-    static StmtBlock makeAssertArray(FENode ctx, String funcName, ComponentArguments.ArgInComponent spec,
+    static List<? extends Statement> makeAssertArray(FENode ctx, String funcName, ComponentArguments.ArgInComponent spec,
                                      String intGeneratorName, String bitGeneratorName, int depth) throws IllegalArgumentException {
         ArrayList<StmtAssert> listOfAsserts = new ArrayList<>();
         Type retType = spec.rty;
@@ -342,7 +342,7 @@ public class SequentialSketchMainCustom {
             StmtAssert dimIAssert = new StmtAssert(ctx, lhsRhsDimIEQ, false);
             listOfAsserts.add(dimIAssert);
         }
-        return new StmtBlock(ctx, listOfAsserts);
+        return listOfAsserts;
     }
 
     private static final String GNAME = "expr";
@@ -408,7 +408,6 @@ public class SequentialSketchMainCustom {
         grammarProg.accept(new AppendFunctions(componentFuncs, componentsProg.getPackages().get(0).getName()));
 
         for (ComponentArguments.ArgInComponent comp : componentArgs) {
-            Function harness = makeHarness(componentProgramNode).name(MANGLE_HARNESS + comp.componentName).returnType(comp.rty).create();
             ArrayList<String> intArgs = new ArrayList<>(), bitArgs = new ArrayList<>();
             for (Parameter par : comp.componentArgs) {
                 if (par.getType().equals(TypePrimitive.bittype))
@@ -418,22 +417,25 @@ public class SequentialSketchMainCustom {
                 else
                     throw new Exception("Error: Cannot accept a component that accepts anything other than int/bit.");
             }
-            ArrayList<Function> fns = new ArrayList<>();
-            fns.add(mkGenerator(componentProgramNode, componentPkg, "vars", TypePrimitive.inttype, intArgs));
-            fns.add(mkGenerator(componentProgramNode, componentPkg, "bit_vars", TypePrimitive.bittype, bitArgs));
-            // append the functions for generators.
-            harness = (Function) harness.accept(new AddClosuresToFunction(fns, harness.getName()));
+            ArrayList<Statement> stmts = new ArrayList<>();
+            Function gInt = mkGenerator(componentProgramNode, componentPkg, "vars", TypePrimitive.inttype, intArgs);
+            Function gBit = mkGenerator(componentProgramNode, componentPkg, "bit_vars", TypePrimitive.bittype, bitArgs);
+            stmts.add(new StmtFunDecl(grammarProg.getOrigin(), gInt));
+            stmts.add(new StmtFunDecl(grammarProg.getOrigin(), gBit));
             if (comp.rty.isArray()) {
-                StmtBlock asserts = makeAssertArray(grammarProg.getOrigin(), GNAME, comp, "vars", "bit_vars", k);
-                harness = harness.creator().body(asserts).create();
+                List<? extends Statement> asserts = makeAssertArray(grammarProg.getOrigin(),
+                        GNAME, comp, "vars", "bit_vars", k);
+                stmts.addAll(asserts);
             } else if (comp.rty.isStruct()) {
                 throw new Exception("Error: Cannot accept a component that returns a struct.");
             } else {
-                ArrayList<Statement> stBody = new ArrayList<Statement>();
-                stBody.add(makeAssert(grammarProg.getOrigin(), GNAME, comp, "vars", "bit_vars", k));
-                StmtBlock body = new StmtBlock(grammarProg.getOrigin(), stBody);
-                harness = harness.creator().body(asserts).create();
+                stmts.add(makeAssert(grammarProg.getOrigin(), GNAME, comp, "vars", "bit_vars", k));
             }
+            Function.FunctionCreator harness = makeHarness(componentProgramNode)
+                    .name(MANGLE_HARNESS + comp.componentName)
+                    .returnType(comp.rty)
+                    .body(new StmtBlock(grammarProg.getOrigin(), stmts));
+
         }
     }
 
