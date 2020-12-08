@@ -1,0 +1,7 @@
+int[2] expr_constraint(int a, int b, int c) {
+  int d = a + b + c;
+  int e = (a + b) * c + b;
+  return {d, e};
+}
+
+

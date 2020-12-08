@@ -1,0 +1,9 @@
+bit[2] boolexpr_constraint(bit a, bit b, bit c) {
+  bit d;
+  bit e;
+  d = (a & b | c & a) & c;
+  e = (a & b) | c;
+  return {d, e};
+}
+
+
