@@ -185,21 +185,18 @@ public class SequentialSketchMainCustom {
 
     // Add a list of new parameters to function calls inside a program,
     // specified by the name of the destination function.
-    static class AugmentFunCallsByName extends FEReplacer {
+    // TODO: See if we need to keep track of the expression type parameters.
+    static class AugmentFunCalls extends FEReplacer {
         private final List<Expression> expressionsToAdd;
-        private final String funName;
-        public AugmentFunCallsByName(String funName, List<Expression> expressionsToAdd) {
+        public AugmentFunCalls(List<Expression> expressionsToAdd) {
             this.expressionsToAdd = expressionsToAdd;
-            this.funName = funName;
         }
 
         @Override
         public Object visitExprFunCall(ExprFunCall exp) {
-            if (!exp.getName().equals(this.funName)) return exp;
             List<Expression> newParams = new ArrayList<Expression>();
             newParams.addAll(exp.getParams());
             newParams.addAll(this.expressionsToAdd);
-            Map<String, Type> newTP = doCallTypeParams(exp);
             return new ExprFunCall(exp, exp.getName(), newParams, exp.getTypeParams());
         }
     }
@@ -345,6 +342,14 @@ public class SequentialSketchMainCustom {
         return listOfAsserts;
     }
 
+    // TODO: See the todo statement in AugmentFunCalls pass.
+    static List<Expression> parameterListToExpressionList(FENode ctx, List<Parameter> params) {
+        ArrayList<Expression> exprs = new ArrayList<>();
+        for (Parameter p : params)
+            exprs.add(new ExprVar(ctx, p.getName()));
+        return exprs;
+    }
+
     private static final String GNAME = "expr";
     public static void main(String[] args) throws Exception {
         System.out.println("Running Custom Sketch main...");
@@ -402,6 +407,8 @@ public class SequentialSketchMainCustom {
         memoParams.add(makeMemoArrayParam(grammarProg.getOrigin(), TypePrimitive.inttype, k));
         memoParams.add(makeMemoArrayParam(grammarProg.getOrigin(), TypePrimitive.bittype, k));
         grammarProg = (Program) grammarProg.accept(new AddParametersToAllFunctions(memoParams, grammarPkg));
+        /* Augment existing function calls in grammar file. */
+        grammarProg = (Program) grammarProg.accept(new AugmentFunCalls(parameterListToExpressionList(grammarProg.getOrigin(), memoParams)));
         /* Memoize existing temporaries in the file. */
         grammarProg = (Program) grammarProg.accept(new MemoizeTemporaries(k));
         /* Append components to the grammar file. */
