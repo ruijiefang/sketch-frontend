@@ -83,6 +83,74 @@ public class SequentialSketchMainCustom {
         }
     }
 
+    // Augment generator functions so that they can assign to temporaries
+    // inside memoizer arrays.
+    static class MemoizeTemporaries extends FEReplacer {
+
+        private final int k;
+        private Type rty = null;
+        public MemoizeTemporaries(int k) {
+            this.k = k;
+        }
+
+        // This is an ugly solution, ugh. But hopefully it'll do:
+        // Detect and replace entire StmtBlock's containing things like
+        //  tempBitVar tmp = new tempBitVar();
+        //  tmp.temp = <some rhs>;
+        //  return tmp.temp;
+        // or
+        //  tempVar tmp = new tempVar();
+        //  tmp.temp = <some rhs>;
+        //  return tmp.temp;
+        // Yes, this is not a generic approach. We need to think of a better
+        // approach, like using annotations. But for now, this'll do.
+        private boolean isTarget(StmtBlock stmt) {
+            boolean criterion = stmt.getStmts().size() == 3;
+            criterion = criterion && (stmt.getStmts().get(0) instanceof StmtVarDecl);
+            if (criterion) {
+                StmtVarDecl stmt1 = (StmtVarDecl) stmt.getStmts().get(0);
+                criterion = (stmt1.getNames().size()==1) && (stmt1.getName(0).equals("tmp"));
+                criterion = criterion && (stmt.getStmts().get(1) instanceof StmtAssign);
+                return criterion;
+            } else return false;
+        }
+
+        private Expression hoistRhs(StmtBlock stmt) {
+            assert stmt.getStmts().size()==3;
+            Statement stmt2 = stmt.getStmts().get(1);
+            assert stmt2 instanceof StmtAssign;
+            StmtAssign aStmt = (StmtAssign) stmt2;
+            return aStmt.getRHS();
+        }
+
+        @Override
+        public Object visitStmtBlock(StmtBlock stmt) {
+            System.out.println("MemoizeTemporaries: doing " + stmt);
+            boolean good = isTarget(stmt);
+            System.out.println("is it a target? " + good);
+            if (!good) return stmt;
+            // is target. now replace entire block with a StmtAssign and StmtReturn.
+            String memoName = this.rty == TypePrimitive.inttype ? "memoInt" : "memoBit";
+            ExprStar choiceHole = new ExprStar(stmt, 0, k, (int) (Math.ceil(Math.log(k)/Math.log(2))));
+            StmtVarDecl vChoiceHole = new StmtVarDecl(stmt, TypePrimitive.inttype, "_tMemo", choiceHole);
+            Expression rhs = hoistRhs(stmt);
+            ExprArrayRange tempAccess = new ExprArrayRange(new ExprVar(stmt, memoName), new ExprVar(stmt, "_tMemo"));
+            StmtAssign assignTemp = new StmtAssign(tempAccess, rhs);
+            StmtReturn retStmt = new StmtReturn(stmt, tempAccess);
+            List<Statement> ns = new ArrayList<>();
+            ns.add(vChoiceHole);
+            ns.add(assignTemp);
+            ns.add(retStmt);
+            return new StmtBlock(stmt, ns);
+        }
+
+        @Override
+        public Object visitFunction(Function func) {
+            this.rty = func.getReturnType();
+            return super.visitFunction(func);
+        }
+    }
+
     // Augment all functions within a package to accept a list of new parameters
     // on the right.
     static class AddParametersToAllFunctions extends FEReplacer {
@@ -162,6 +230,10 @@ public class SequentialSketchMainCustom {
         }
     }
 
+    //
+    // Helpers to facilitate doing codegen of the Sketch harness given the input files.
+    //
+
     // Changes the layout of the expression generator grammars to
     // add in new constructs for assignment of memoized variables.
     static Function.FunctionCreator makeHarness(FENode ctx) {
@@ -206,7 +278,7 @@ public class SequentialSketchMainCustom {
             name.add("memoInt");
         else
             name.add("memoBit");
-        FieldDecl arr = new FieldDecl(progCtx, arrType, name, emptyList);
+        return new FieldDecl(progCtx, arrType, name, emptyList);
     }
 
     static Parameter makeMemoArrayParam(FENode funcNode, Type t, int k) {
@@ -307,10 +379,13 @@ public class SequentialSketchMainCustom {
         /* Add parameter to memo arrays in grammar file. */
         List<Parameter> memoParams = new ArrayList<>();
         memoParams.add(makeMemoArrayParam(grammarProg.getOrigin(), TypePrimitive.inttype, k));
-        memoParams.add(makeMemoArrayParam(grammarProg.getOrigin(), TypePrimitive.bittype, k))
+        memoParams.add(makeMemoArrayParam(grammarProg.getOrigin(), TypePrimitive.bittype, k));
         grammarProg = (Program) grammarProg.accept(new AddParametersToAllFunctions(memoParams, grammarPkg));
+        /* Memoize existing temporaries in the file. */
+        grammarProg = (Program) grammarProg.accept(new MemoizeTemporaries(k));
         /* Append components to the grammar file. */
         grammarProg.accept(new AppendFunctions(componentFuncs, componentsProg.getPackages().get(0).getName()));
+
         for (ComponentArguments.ArgInComponent comp : componentArgs) {
             Function harness = makeHarness(componentProgramNode).name(MANGLE_HARNESS + comp.componentName).create();
             ArrayList<String> intArgs = new ArrayList<>(), bitArgs = new ArrayList<>();
@@ -328,7 +403,7 @@ public class SequentialSketchMainCustom {
             // append the functions for generators.
             harness = (Function) harness.accept(new AddClosuresToFunction(fns, harness.getName()));
             if (comp.rty.isArray()) {
-                // StmtBlock asserts = makeAssertArray(componentProgramNode);
+                StmtBlock asserts = makeAssertArray(componentProgramNode);
             } else if (comp.rty.isStruct()) {
                 throw new Exception("Error: Cannot accept a component that returns a struct.");
             } else {

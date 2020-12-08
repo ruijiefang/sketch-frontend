@@ -11,10 +11,7 @@ import java.io.PrintWriter;
 
 import sketch.compiler.ast.core.*;
 import sketch.compiler.ast.core.Package;
-import sketch.compiler.ast.core.exprs.ExprADTHole;
-import sketch.compiler.ast.core.exprs.ExprFunCall;
-import sketch.compiler.ast.core.exprs.ExprStar;
-import sketch.compiler.ast.core.exprs.ExprVar;
+import sketch.compiler.ast.core.exprs.*;
 import sketch.compiler.ast.core.exprs.regens.ExprRegen;
 import sketch.compiler.passes.printers.CodePrinter;
 import sketch.compiler.ast.core.Function.LibraryFcnType;
@@ -117,5 +114,33 @@ public class SCP extends FEReplacer
         System.out.println("SCP: Visiting if/then statement: " + stmt.toString());
         System.out.println("  does this if/then have an alt?? " + (stmt.getAlt() == null ? "No" : "Yes"));
         return super.visitStmtIfThen(stmt);
+    }
+
+    @Override
+    public Object visitStmtAssign(StmtAssign stmt) {
+        System.out.println("SCP: Visiting assignment statement: " + stmt.toString());
+        System.out.println(" | assignment lhs: " + stmt.getLHS().toString());
+        System.out.println(" | assignment rhs: " + stmt.getRHS().toString());
+        return super.visitStmtAssign(stmt);
+    }
+
+    @Override
+    public Object visitExprArrayRange(ExprArrayRange exp) {
+        System.out.println("SCP: Visiting expression array range: " + exp.toString());
+        System.out.println(" | base: " + exp.getBase());
+        System.out.println(" | indices: " + exp.getSelection().start().toString());
+        return super.visitExprArrayRange(exp);
+    }
+
+    @Override
+    public Object visitExprConstInt(ExprConstInt exp) {
+        System.out.println("SCP: Visiting constant int expression: " + exp.toString());
+        return super.visitExprConstInt(exp);
+    }
+
+    @Override
+    public Object visitStmtVarDecl(StmtVarDecl stmt) {
+        System.out.println("SCP: Visit statement VarDecl: " + stmt.toString());
+        return super.visitStmtVarDecl(stmt);
     }
 }

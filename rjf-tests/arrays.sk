@@ -1,0 +1,25 @@
+int[3] a;
+
+generator int rrr(ref int[3] b) {
+  int g = ??(3);
+  return b[0];
+}
+
+generator void good() {
+  int a = 10;
+  a = 11;
+}
+
+struct tempBitVar {
+  bit temp;
+}
+
+generator bit better(){
+  if (0) {
+  tempBitVar tmp = new tempBitVar();
+  tmp.temp = ??;                              
+  return tmp.temp;
+  }
+  else return 1;
+}
+
