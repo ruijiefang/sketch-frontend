@@ -17,6 +17,7 @@ import sketch.compiler.parser.RegenParser;
 import sketch.compiler.passes.printers.CodePrinterVisitor;
 import sketch.util.exceptions.SketchException;
 
+import java.io.FileOutputStream;
 import java.io.PrintWriter;
 import java.util.*;
 import java.util.concurrent.*;
@@ -134,7 +135,7 @@ public class SequentialSketchMainCustom {
         public Object visitStmtBlock(StmtBlock stmt) {
             //System.out.println("MemoizeTemporaries: doing {{{{{{{{{{{{{{{{" + stmt + "}}}}}}}}}}}}}}}}");
             boolean good = isTarget(stmt);
-            System.out.println("is it a target? " + good);
+            //System.out.println("is it a target? " + good);
             if (!good) return super.visitStmtBlock(stmt);
             // is target. now replace entire block with a StmtAssign and StmtReturn.
             String memoName = this.rty == TypePrimitive.inttype ? "memoInt" : "memoBit";
@@ -145,6 +146,9 @@ public class SequentialSketchMainCustom {
             StmtAssign assignTemp = new StmtAssign(tempAccess, rhs);
             StmtReturn retStmt = new StmtReturn(stmt, tempAccess);
             List<Statement> ns = new ArrayList<>();
+            // mainly for preserving depth assert statements.
+            if (stmt.getStmts().size() > 3)
+                ns.addAll(stmt.getStmts().subList(0, stmt.getStmts().size() - 3));
             ns.add(vChoiceHole);
             ns.add(assignTemp);
             ns.add(retStmt);
@@ -228,7 +232,7 @@ public class SequentialSketchMainCustom {
         @Override
         public Object visitPackage(Package spec) {
             if (!spec.getName().equals(this.packageName)) return spec;
-            System.out.println("AddGlobalVariablesToPackage:  adding" + newFieldsToAdd.size() + " vars to package " + this.packageName);
+            //System.out.println("AddGlobalVariablesToPackage:  adding" + newFieldsToAdd.size() + " vars to package " + this.packageName);
             List<FieldDecl> decls = new ArrayList<>();
             decls.addAll(this.newFieldsToAdd);
             decls.addAll(spec.getVars());
@@ -257,7 +261,7 @@ public class SequentialSketchMainCustom {
         }
         if (args.size()==0)
             argsStr.append("0|1");
-        System.out.println(" makeSelector: argsStr is: " + argsStr.toString());
+       // System.out.println(" makeSelector: argsStr is: " + argsStr.toString());
         return new ExprRegen(ctx, RegenParser.parse(argsStr.toString()));
     }
 
@@ -333,21 +337,26 @@ public class SequentialSketchMainCustom {
         return new StmtAssert(ctx, lhsRhsEq, false);
     }
 
-    static List<? extends Statement> makeAssertArray(FENode ctx, String funcName, ComponentArguments.ArgInComponent spec,
-                                     String intGeneratorName, String bitGeneratorName, int depth) throws IllegalArgumentException {
-        ArrayList<StmtAssert> listOfAsserts = new ArrayList<>();
-        Type retType = spec.rty;
+    static int getTypeArrayLen(Type retType) throws IllegalArgumentException {
         if (!retType.isArray()) throw new IllegalArgumentException("error: makeAssertArray can only be used for multidimensional specs.");
         TypeArray arrT = (TypeArray) retType;
         Expression lenExpr = arrT.getLength();
         if (!(lenExpr instanceof ExprConstInt)) throw new IllegalArgumentException("error: cannot assert spec that returns variable-sized array with bounds unknown: " + lenExpr.toString());
         int len = ((ExprConstInt) lenExpr).getVal();
-        List<Expression> lhsParams = new ArrayList<>();
-        List<Expression> rhsParams = new ArrayList<>();
-        makeLhsRhsForAsserts(ctx, spec, intGeneratorName, bitGeneratorName, lhsParams, rhsParams, depth);
-        ExprFunCall lhsCallExpr = new ExprFunCall(ctx, funcName, lhsParams);
-        ExprFunCall rhsCallExpr = new ExprFunCall(ctx, spec.componentName, rhsParams);
+        return len;
+    }
+
+    static List<? extends Statement> makeAssertArray(FENode ctx, String funcName, ComponentArguments.ArgInComponent spec,
+                                     String intGeneratorName, String bitGeneratorName, int[] depth) throws IllegalArgumentException {
+        ArrayList<StmtAssert> listOfAsserts = new ArrayList<>();
+        Type retType = spec.rty;
+        int len = getTypeArrayLen(retType);
         for (int i = 0; i < len; ++i) {
+            List<Expression> lhsParams = new ArrayList<>();
+            List<Expression> rhsParams = new ArrayList<>();
+            makeLhsRhsForAsserts(ctx, spec, intGeneratorName, bitGeneratorName, lhsParams, rhsParams, depth[i]);
+            ExprFunCall lhsCallExpr = new ExprFunCall(ctx, funcName, lhsParams);
+            ExprFunCall rhsCallExpr = new ExprFunCall(ctx, spec.componentName, rhsParams);
             ExprArrayRange dimIRHS = new ExprArrayRange(rhsCallExpr, new ExprConstInt(ctx, i));
             ExprBinary lhsRhsDimIEQ = new ExprBinary(ctx, ExprBinary.BINOP_EQ, lhsCallExpr, dimIRHS);
             StmtAssert dimIAssert = new StmtAssert(ctx, lhsRhsDimIEQ, false);
@@ -364,30 +373,21 @@ public class SequentialSketchMainCustom {
         return exprs;
     }
 
-    private static final String GNAME = "expr";
-    public static void main(String[] args) throws Exception {
-        System.out.println("Running Custom Sketch main...");
-        if (args.length != 3)
+    public static void generateCode(String[] args, int[] depths, String outFile) throws Exception {
+      //  System.out.println("Running Custom Sketch main...");
+        if (args.length != 4)
             throw new IllegalArgumentException("CUSTOM SKETCH: Error invalid # args " + args.length);
         String componentsFile = args[0];
         String grammarFile = args[1];
         int k = Integer.parseInt(args[2]); // size of memo table
-        System.out.printf("CUSTOM SKETCH: Components file = %s, Grammar file = %s \n", componentsFile, grammarFile);
+        String GNAME = args[3];
+        System.out.printf("MinDepthSketch Codegen: Components file = %s, Grammar file = %s, width = %d, generator name = %s\n", componentsFile, grammarFile, k, GNAME);
         TempVarGen varGenComponents = new TempVarGen();
         TempVarGen varGenGrammar = new TempVarGen();
         CommonSketchMain componentsOption = new CommonSketchMain(new SketchOptions(new String[]{componentsFile}));
         CommonSketchMain grammarOption = new CommonSketchMain(new SketchOptions(new String[]{grammarFile}));
-        System.out.println("Parsing components...");
         Program componentsProg = (new ParseProgramStage(varGenComponents, componentsOption.options)).visitProgram(null);
         Program grammarProg = (new ParseProgramStage(varGenGrammar, grammarOption.options)).visitProgram(null);
-        componentsProg.accept(new SCP());
-        System.out.println(" --------------- Components Program ---------------");
-        System.out.println(componentsProg.toString());
-        System.out.println(" --------------- Grammar Program ------------------");
-        System.out.println(grammarProg.toString());
-        grammarProg.accept(new SCP());
-        System.out.println(" --------------------------------------------------");
-        System.out.println("Analyzing each component...");
         ComponentArguments componentArgs = (ComponentArguments) componentsProg.accept(new ComponentArgumentsHoisting());
         componentArgs.print();
         FENode componentProgramNode = componentsProg.getOrigin();
@@ -407,8 +407,8 @@ public class SequentialSketchMainCustom {
         memoArrs.add(makeMemoArray(TypePrimitive.inttype, grammarProg.getOrigin(), k));
         memoArrs.add(makeMemoArray(TypePrimitive.bittype, grammarProg.getOrigin(), k));
         grammarProg = (Program) grammarProg.accept(new AddGlobalVariablesToPackage(grammarPkg, memoArrs));
-        System.out.println("grammar program after adding memo arrays: " + grammarProg);
-        System.out.println("------------------------------------------------------end SCP");
+        //System.out.println("grammar program after adding memo arrays: " + grammarProg);
+        //System.out.println("------------------------------------------------------end SCP");
         /* Add parameter to memo arrays in grammar file. */
         List<Parameter> memoParams = new ArrayList<>();
         memoParams.add(makeMemoArrayParam(grammarProg.getOrigin(), TypePrimitive.inttype, k));
@@ -420,9 +420,9 @@ public class SequentialSketchMainCustom {
         grammarProg = (Program) grammarProg.accept(new MemoizeTemporaries(k));
         /* Append components to the grammar file. */
         grammarProg = (Program) grammarProg.accept(new AppendFunctions(componentFuncs, grammarProg.getPackages().get(0).getName()));
-        System.out.println("Grammar Program: Before inserting harness ------------------");
-        System.out.println(grammarProg.toString());
-        System.out.println("----------------------- Inserting harness ------------------");
+      //  System.out.println("Grammar Program: Before inserting harness ------------------");
+      //  System.out.println(grammarProg.toString());
+      //  System.out.println("----------------------- Inserting harness ------------------");
         ArrayList<Function> harnesses = new ArrayList<>();
         for (ComponentArguments.ArgInComponent comp : componentArgs) {
             ArrayList<String> intArgs = new ArrayList<>(), bitArgs = new ArrayList<>();
@@ -445,12 +445,12 @@ public class SequentialSketchMainCustom {
             stmts.add(new StmtFunDecl(grammarProg.getOrigin(), gBit));
             if (comp.rty.isArray()) {
                 List<? extends Statement> asserts = makeAssertArray(grammarProg.getOrigin(),
-                        GNAME, comp, "vars", "bit_vars", k);
+                        GNAME, comp, "vars", "bit_vars", depths);
                 stmts.addAll(asserts);
             } else if (comp.rty.isStruct()) {
                 throw new Exception("Error: Cannot accept a component that returns a struct.");
             } else {
-                stmts.add(makeAssert(grammarProg.getOrigin(), GNAME, comp, "vars", "bit_vars", k));
+                stmts.add(makeAssert(grammarProg.getOrigin(), GNAME, comp, "vars", "bit_vars", depths[0]));
             }
             Function harness = makeHarness(componentProgramNode)
                     .name(MANGLE_HARNESS + comp.componentName)
@@ -459,15 +459,172 @@ public class SequentialSketchMainCustom {
                     .body(new StmtBlock(grammarProg.getOrigin(), stmts)).create();
             harnesses.add(harness);
         }
-        System.out.println("Now actually adding all the harnesses.");
+        //System.out.println("Now actually adding all the harnesses.");
         grammarProg = (Program) grammarProg.accept(new AppendFunctions(harnesses, grammarPkg));
-        System.out.println("Grammar Program: Final form: ----------------------------------------------");
-        System.out.println(grammarProg);
-        System.out.println("Number of functions: "+ grammarProg.getPackages().get(0));
-        grammarProg.debugDump();
+        //System.out.println("Grammar Program: Final form: ----------------------------------------------");
+        //System.out.println(grammarProg);
+        //System.out.println("Number of functions: "+ grammarProg.getPackages().get(0));
         //SequentialSketchMain NM = new SequentialSketchMain(new String[]{"nonExistent.sk"});
         //System.out.println(" Is preprocessing successful? ");
         //NM.preprocAndSemanticCheck(grammarProg);
+        System.out.println("Generated Program: ");
+        System.out.println(grammarProg.toString());
+        FileOutputStream fo = new FileOutputStream(outFile);
+        grammarProg.debugDump(fo);
+    }
+
+    public static void main(String[] args) throws Exception {
+        if (args.length != 4)
+            throw new IllegalArgumentException("CUSTOM SKETCH: Error invalid # args " + args.length);
+        String componentsFile = args[0];
+        String grammarFile = args[1];
+        int k = Integer.parseInt(args[2]); // size of memo table
+        String GNAME = args[3];
+        TempVarGen varGenComponents = new TempVarGen();
+        TempVarGen varGenGrammar = new TempVarGen();
+        CommonSketchMain componentsOption = new CommonSketchMain(new SketchOptions(new String[]{componentsFile}));
+        CommonSketchMain grammarOption = new CommonSketchMain(new SketchOptions(new String[]{grammarFile}));
+        Program componentsProg = (new ParseProgramStage(varGenComponents, componentsOption.options)).visitProgram(null);
+        Program grammarProg = (new ParseProgramStage(varGenGrammar, grammarOption.options)).visitProgram(null);
+        System.out.println(" --------------- Components Program ---------------");
+        System.out.println(componentsProg.toString());
+        System.out.println(" --------------- Grammar Program ------------------");
+        System.out.println(grammarProg.toString());
+        System.out.println(" --------------------------------------------------");
+        System.out.printf("MinDepthSketch Codegen: Components file = %s, Grammar file = %s, width = %d, generator name = %s\n", componentsFile, grammarFile, k, GNAME);
+        ComponentArguments componentArgs = (ComponentArguments) componentsProg.accept(new ComponentArgumentsHoisting());
+        ArrayList<int[]> listOfBnds = new ArrayList<>();
+        for (ComponentArguments.ArgInComponent c : componentArgs) {
+            int[] bnd = new int[getTypeArrayLen(c.rty)];
+            Arrays.fill(bnd, 0);
+            listOfBnds.add(bnd);
+        }
+        // unfortunately, our search strategy and program structure
+        // only works for a single component right now. To do multi-components,
+        // split them into separate files and call this program separately.
+        assert componentArgs.numComponents() == 1;
+        int[] firstBnd = listOfBnds.get(0);
+        boolean optimized[] = new boolean[firstBnd.length];
+        Arrays.fill(optimized, false);
+        boolean stillGoing = true; // are we still going.
+        boolean bad = false; // can sketch solve our program.
+        boolean startedOpt = false; // have we started doing optimization over depth array.
+        int numIters = 0;
+        while (stillGoing) {
+            generateCode(args, firstBnd, "TempMinSizeCodeGen.sk");
+            try {
+                go(new String[]{"TempMinSizeCodeGen.sk"});
+            } catch (Exception ign) {
+                bad = true;
+            }
+            if (bad && !startedOpt) {
+                bad = false;
+                for(int i = 0; i < firstBnd.length; ++i) firstBnd[i]++;
+            } else if (!bad && !startedOpt)  {
+                startedOpt = true;
+            } else if (bad && startedOpt) {
+              for (int i = firstBnd.length - 1; i >= 0; i--)
+                  if (!optimized[i]) {
+                      ++firstBnd[i];
+                      optimized[i] = true;
+                      if (i - 1 >= 0)
+                          --firstBnd[i];
+                      else stillGoing = false;
+                  }
+            } else { /* !bad && startedOpt */
+                for (int i = firstBnd.length - 1; i >= 0; i--)
+                    if (!optimized[i]) {
+                        --firstBnd[i];
+                    }
+                if (optimized[0])
+                    stillGoing = false;
+            }
+            System.out.printf("*****************MinSizeSketch: Iter %d, StillGoing = %b, StartedOpt = %b, Depths: ", numIters, stillGoing, startedOpt);
+            for(int i = 0; i < firstBnd.length; ++i)
+                System.out.printf("%d ", firstBnd[i]);
+            System.out.printf("***************\n");
+            ++numIters;
+        }
+        System.out.println(" *********************** MinSizeSketch: Found an optimized solution ******************  ");
+
+        System.out.printf("*****************Optimal Solution found with parameters: Iter %d, StillGoing = %b, StartedOpt = %b, Depths: ", numIters, stillGoing, startedOpt);
+        for(int i = 0; i < firstBnd.length; ++i)
+            System.out.printf("%d ", firstBnd[i]);
+        System.out.printf("***************\n");
+        System.out.println("Final Round Codegen output:");
+        generateCode(args, firstBnd, "TempMinSizeCodeGen.sk");
+        System.out.println("Final Solver Output: ");
+        System.out.println("------------------------------------------------------------------------");
+        go(new String[]{"TempMinSizeCodeGen.sk"});
+    }
+
+
+
+    public static void go(String[] args) throws Exception {
+        System.out.println("Solving: SketchSolver version " +
+                PlatformLocalization.getLocalization().version);
+        long beg = System.currentTimeMillis();
+        ErrorHandling.checkJavaVersion(1, 6);
+        // TODO -- change class names so this is clear
+        final SequentialSketchMain sketchmain = new SequentialSketchMain(args);
+        PlatformLocalization.getLocalization().setTempDirs();
+        int exitCode = 0;
+        try {
+            SketchOptions options = SketchOptions.getSingleton();
+            if (options.feOpts.timeout > 0) {
+                ExecutorService executor = Executors.newSingleThreadExecutor();
+                Future<?> f = executor.submit(sketchmain);
+                try {
+                    f.get((long) options.feOpts.timeout, TimeUnit.MINUTES);
+                } catch (TimeoutException e) {
+                    System.out.println("Sketch front-end timed out");
+                    exitCode = 1;
+                } catch (ExecutionException e) {
+                    ErrorHandling.handleErr(e);
+                    exitCode = 1;
+                } catch (InterruptedException e) {
+                    ErrorHandling.handleErr(e);
+                    exitCode = 1;
+                } finally {
+                    executor.shutdown();
+                }
+            } else { // normal run
+                // System.out.println("Running");
+                sketchmain.run();
+                // System.out.println("End run");
+            }
+        } catch (SketchException e) {
+            e.print();
+            if (isTest) {
+                throw e;
+            } else {
+                // e.printStackTrace();
+                exitCode = 1;
+            }
+        } catch (java.lang.Error e) {
+            ErrorHandling.handleErr(e);
+            // necessary for unit tests, etc.
+            if (isTest) {
+                throw e;
+            } else {
+                exitCode = 1;
+            }
+        } catch (RuntimeException e) {
+            ErrorHandling.handleErr(e);
+            if (isTest) {
+                throw e;
+            } else {
+                if (sketchmain.options.debugOpts.verbosity > 3) {
+                    e.printStackTrace();
+                }
+                exitCode = 1;
+            }
+        } finally {
+            System.out.println("Total time = " + (System.currentTimeMillis() - beg));
+        }
+        if (exitCode != 0) {
+            throw new Exception();
+        }
     }
 
 }

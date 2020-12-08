@@ -774,7 +774,6 @@ public class TypeCheck extends BidirectionalPass {
         Set<String> nameChk = new HashSet<String>();
         for (Function fun : pkg.getFuncs()) {
             // Check if name check has the same name as the current function
-            System.out.println(" TypeCheck: visiting function " + fun.getName() + " in package " + pkg.getName());
             if (nameChk.contains(fun.getName())) {
                 throw new ExceptionAtNode("Duplicated Name in Package", fun);
             }

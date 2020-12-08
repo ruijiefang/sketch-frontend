@@ -50,7 +50,8 @@ public class ComponentArguments implements Iterable<ComponentArguments.ArgInComp
     public void add(ArgInComponent ac) {
         this.components.add(ac);
     }
-
+    public int numComponents() { return this.components.size(); }
+    public ArgInComponent first() { return this.components.get(0); }
     public void add(Function f) {
         List<Parameter> parameters = f.getParams();
         if (parameters == null) return;

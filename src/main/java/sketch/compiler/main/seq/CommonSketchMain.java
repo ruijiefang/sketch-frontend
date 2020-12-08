@@ -15,7 +15,6 @@ public class CommonSketchMain {
     public CommonSketchMain(SketchOptions options) {
         this.options = options;
     }
-    public CommonSketchMain(){}
     public static void dump(Program prog) {
         dump(prog, "");
     }

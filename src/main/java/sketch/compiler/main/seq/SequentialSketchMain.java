@@ -110,45 +110,43 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
         super(new SketchOptions(args));
     }
 
-    public SequentialSketchMain(){}
-
-	/** for subclasses */
+    /** for subclasses */
     public SequentialSketchMain(SketchOptions options) {
         super(options);
     }
 
     public boolean isParallel () {
-		return false;
-	}
+        return false;
+    }
 
     public RecursionControl visibleRControl (Program p) {
-		// return new BaseRControl(params.inlineAmt);
+        // return new BaseRControl(params.inlineAmt);
         return new AdvancedRControl(options.bndOpts.branchAmnt,
                 options.bndOpts.inlineAmnt, true, p);
-	}
+    }
 
-	/**
-	 * This function produces a recursion control that is used by all transformations that are not user visible.
-	 * In particular, the conversion to boolean. By default it is the same as the visibleRControl.
-	 * @return
-	 */
-	public RecursionControl internalRControl(){
+    /**
+     * This function produces a recursion control that is used by all transformations that are not user visible.
+     * In particular, the conversion to boolean. By default it is the same as the visibleRControl.
+     * @return
+     */
+    public RecursionControl internalRControl(){
 
-	    //return new AdvancedRControl(options.bndOpts.branchAmnt, options.bndOpts.inlineAmnt, prog);
-		return new DelayedInlineRControl(0, 0);
-	}
+        //return new AdvancedRControl(options.bndOpts.branchAmnt, options.bndOpts.inlineAmnt, prog);
+        return new DelayedInlineRControl(0, 0);
+    }
 
 
-	protected TempVarGen varGen = new TempVarGen();
+    protected TempVarGen varGen = new TempVarGen();
 
-	/** hack to check deps across stages; accessed by CompilerStage */
+    /** hack to check deps across stages; accessed by CompilerStage */
     public final HashSet<Class<? extends FEVisitor>> runClasses =
             new HashSet<Class<? extends FEVisitor>>();
 
     /**
      * Things that are part of the language, but not part of the syntax since they're just
      * function calls.
-     * 
+     *
      * @author gatoatigrado (nicholas tung) [email: ntung at ntung]
      * @license This file is licensed under BSD license, available at
      *          http://creativecommons.org/licenses/BSD/. While not required, if you make
@@ -158,8 +156,8 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
         public BeforeSemanticCheckStage() {
             super(SequentialSketchMain.this);
             FEVisitor[] passes2 =
- { new MinimizeFcnCall() /* new TprintFcnCall(), */
-            };
+                    { new MinimizeFcnCall() /* new TprintFcnCall(), */
+                    };
             passes = new Vector<FEVisitor>(Arrays.asList(passes2));
         }
     }
@@ -172,7 +170,7 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
                             /*
                              * new ReplaceMinLoops(varGen), new MainMethodCreateNospec(),
                              */
-                    new SetDeterministicFcns()/*
+                            new SetDeterministicFcns()/*
                                                * , new
                                                * ReplaceParforLoops(options.cudaOpts.
                                                * threadBlockDim, varGen)
@@ -188,9 +186,9 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
         public LowerHighLevelConstructs() {
             super(SequentialSketchMain.this);
             FEVisitor[] passes2 =
- { // new GlobalsToParams(varGen),
-                    new LowerInstrumentation(varGen)
-                    // , new FlattenCommaMultidimArrays(null)
+                    { // new GlobalsToParams(varGen),
+                            new LowerInstrumentation(varGen)
+                            // , new FlattenCommaMultidimArrays(null)
                     };
             passes = new Vector<FEVisitor>(Arrays.asList(passes2));
         }
@@ -199,7 +197,7 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
     /**
      * The intermediate stage that generates low-level C code, i.e. with the SPMD model
      * sequentialized
-     * 
+     *
      * @author gatoatigrado (nicholas tung) [email: ntung at ntung]
      */
     public class LowLevelCStage extends CompilerStage {
@@ -277,7 +275,7 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
         */
 //            return new LowLevelCStage();
 //        } else {
-            // return new CudaLowLevelCStage();
+        // return new CudaLowLevelCStage();
         return new SpmdLowLevelCStage();
 //        }
     }
@@ -291,7 +289,7 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
                 visibleRControl(lprog), partialEval)).visitProgram(lprog);
     }
 
-    
+
     public SynthesisResult partialEvalAndSolve(Program prog) {
         SketchLoweringResult sketchProg = lowerToSketch(prog);
         // sketchProg.result.debugDump("");
@@ -324,7 +322,7 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
         public Program afterSPMDSeq;
 
         public SketchLoweringResult(Program result, Program highLevelC,
-                Program afterSPMDSeq)
+                                    Program afterSPMDSeq)
         {
             this.result = result;
             this.highLevelC = highLevelC;
@@ -338,7 +336,7 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
         public SolutionStatistics solverStats;
 
         public SynthesisResult(SketchLoweringResult lowered, ValueOracle solution,
-                SolutionStatistics solverStats)
+                               SolutionStatistics solverStats)
         {
             this.lowered = lowered;
             this.solution = solution;
@@ -359,42 +357,42 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
         return new SketchLoweringResult(prog, highLevelC, afterSPMDSeq);
     }
 
-	public void testProg(Program p){
-	    
+    public void testProg(Program p){
+
         p =
                 (Program) p.accept(new EliminateStructs(varGen, new ExprConstInt(
                         options.bndOpts.arrSize)));
         p = (Program) p.accept(new EliminateMultiDimArrays(true, varGen));
-	    sketch.compiler.dataflow.nodesToSB.ProduceBooleanFunctions partialEval =
-            new sketch.compiler.dataflow.nodesToSB.ProduceBooleanFunctions(varGen,
-                    null, System.out
-                    , options.bndOpts.unrollAmnt 
-                    , options.bndOpts.arrSize
-, new AdvancedRControl(
-                                options.bndOpts.branchAmnt, options.bndOpts.inlineAmnt,
-                                true, p), false);
+        sketch.compiler.dataflow.nodesToSB.ProduceBooleanFunctions partialEval =
+                new sketch.compiler.dataflow.nodesToSB.ProduceBooleanFunctions(varGen,
+                        null, System.out
+                        , options.bndOpts.unrollAmnt
+                        , options.bndOpts.arrSize
+                        , new AdvancedRControl(
+                        options.bndOpts.branchAmnt, options.bndOpts.inlineAmnt,
+                        true, p), false);
         log("MAX LOOP UNROLLING = " + options.bndOpts.unrollAmnt);
         log("MAX FUNC INLINING  = " + options.bndOpts.inlineAmnt);
         log("MAX ARRAY SIZE  = " + options.bndOpts.arrSize);
         p.accept(partialEval);
-	    
-	}
+
+    }
 
     public static String getOutputFileName(SketchOptions options) {
         if (options.feOpts.outputProgName == null) {
             options.feOpts.outputProgName = options.sketchName;
         }
         String resultFile = options.feOpts.outputProgName;
-		if(resultFile.lastIndexOf("/")>=0)
-			resultFile=resultFile.substring(resultFile.lastIndexOf("/")+1);
-		if(resultFile.lastIndexOf("\\")>=0)
-			resultFile=resultFile.substring(resultFile.lastIndexOf("\\")+1);
-		if(resultFile.lastIndexOf(".")>=0)
-			resultFile=resultFile.substring(0,resultFile.lastIndexOf("."));
-		if(resultFile.lastIndexOf(".sk")>=0)
-			resultFile=resultFile.substring(0,resultFile.lastIndexOf(".sk"));
-		return resultFile;
-	}
+        if(resultFile.lastIndexOf("/")>=0)
+            resultFile=resultFile.substring(resultFile.lastIndexOf("/")+1);
+        if(resultFile.lastIndexOf("\\")>=0)
+            resultFile=resultFile.substring(resultFile.lastIndexOf("\\")+1);
+        if(resultFile.lastIndexOf(".")>=0)
+            resultFile=resultFile.substring(0,resultFile.lastIndexOf("."));
+        if(resultFile.lastIndexOf(".sk")>=0)
+            resultFile=resultFile.substring(0,resultFile.lastIndexOf(".sk"));
+        return resultFile;
+    }
 
 
     protected void outputCCode(Program prog) {
@@ -404,7 +402,7 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
         }
 
         (new OutputCCode(varGen, options)).visitProgram(prog);
-	}
+    }
 
     public void outputHoleFunc(String outputHoleFunc, Program prog) {
         if (prog == null) {
@@ -414,31 +412,31 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
 
         (new OutputHoleFunc(outputHoleFunc)).visitProgram(prog);
     }
-	
-	public String benchmarkName(){
-		String rv = "";
-		boolean f = true;
-		for(String s : options.args){
-			if(!f){rv += "_";}
-			rv += s;			
-			f = false;
-		}
-		for (String define : options.feOpts.def) {
-		    rv += "_" + define;
-		}
-		return rv;
-	}
-	
 
-	protected boolean isSketch (Program p) {
-		class hasHoles extends FEReplacer {
-			public Object visitExprStar (ExprStar es) {
-				throw new ControlFlowException ("yes");
-			}
-		}
-		try {  p.accept (new hasHoles ());  return false;  }
-		catch (ControlFlowException cfe) {  return true;  }
-	}
+    public String benchmarkName(){
+        String rv = "";
+        boolean f = true;
+        for(String s : options.args){
+            if(!f){rv += "_";}
+            rv += s;
+            f = false;
+        }
+        for (String define : options.feOpts.def) {
+            rv += "_" + define;
+        }
+        return rv;
+    }
+
+
+    protected boolean isSketch (Program p) {
+        class hasHoles extends FEReplacer {
+            public Object visitExprStar (ExprStar es) {
+                throw new ControlFlowException ("yes");
+            }
+        }
+        try {  p.accept (new hasHoles ());  return false;  }
+        catch (ControlFlowException cfe) {  return true;  }
+    }
 
     public void generateCode(Program prog) {
         // rename main function so it's not the C main
@@ -504,62 +502,51 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
                         !options.solverOpts.unoptimized, options.bndOpts.arrSize,
                         options.bndOpts.srcTupleDepth));
         // prog.debugDump();
-        System.out.println("After CREATE HARNESS: " + prog);
+
         prog = (Program) prog.accept(new ConstantReplacer(null));
-        System.out.println("After CONSTANT REPLACER: " + prog);
+
 
         prog = (Program) prog.accept(new MinimizeFcnCall());
-        System.out.println("After FuncCall Minimizer: " + prog);
 
         prog = (Program) prog.accept(new SpmdbarrierCall());
-        System.out.println("After Spmd: " + prog);
 
         prog = (Program) prog.accept(new PidReplacer());
-        System.out.println("After PidReplacer: " + prog);
 
-		prog = (Program) prog.accept(new ExtractComplexLoopConditions(varGen));
-        System.out.println("After LoopConditions: " + prog);
+        prog = (Program) prog.accept(new ExtractComplexLoopConditions(varGen));
 
-		//prog = (Program) prog.accept(new ExpressionCastingReplacer());
-        //System.out.println("After CastingReplacer: " + prog);
+        prog = (Program) prog.accept(new ExpressionCastingReplacer());
 
 
-		prog = (Program) prog.accept(new LocalVariablesReplacer(varGen));
-        System.out.println("After LocalVarsReplacer: " + prog);
+        prog = (Program) prog.accept(new LocalVariablesReplacer(varGen));
 
-        
+
         // prog.debugDump("********************************************* Before
         // remove lambda expression");
 
 
-		// These three passes need to be integrated into the Bidirectional
-		// framework.
-		prog = (Program) prog.accept(new ExpandRepeatCases());
-        System.out.println("After ExpandRepeatCases: " + prog);
-
+        // These three passes need to be integrated into the Bidirectional
+        // framework.
+        prog = (Program) prog.accept(new ExpandRepeatCases());
         prog = (Program) prog.accept(new EliminateListOfFieldsMacro());
-        System.out.println("After EliminateFieldsMacro: " + prog);
-
         prog = (Program) prog.accept(new EliminateEmptyArrayLen());
-        System.out.println("After EliminateEmptyArrayLen: " + prog);
 
         BidirectionalAnalysis bda = new BidirectionalAnalysis(varGen);
-		TypeCheck tchk = new TypeCheck();
-		bda.addPass(tchk);
-		bda.addPostPass(tchk.getPostPass());
-		EliminateLambdas lamelim = new EliminateLambdas();
-		bda.addPass(lamelim);
-		InnerFunReplacer ifrepl = new InnerFunReplacer();
-		bda.addPass(ifrepl);
-		bda.addPostPass(ifrepl.getPostPass());
-		sketch.compiler.passes.bidirectional.RemoveFunctionParameters rfp = new sketch.compiler.passes.bidirectional.RemoveFunctionParameters();
-		bda.addPass(rfp);
-		bda.addPostPass(rfp.getPostPass());
-		prog = bda.doProgram(prog);
-		prog = (Program) prog.accept(new ThreadClosure(rfp, ifrepl));
-		prog = (Program) prog.accept(lamelim.getCleanup());
-		if (!tchk.good) {
-			throw new ProgramParseException("Semantic check failed");
+        TypeCheck tchk = new TypeCheck();
+        bda.addPass(tchk);
+        bda.addPostPass(tchk.getPostPass());
+        EliminateLambdas lamelim = new EliminateLambdas();
+        bda.addPass(lamelim);
+        InnerFunReplacer ifrepl = new InnerFunReplacer();
+        bda.addPass(ifrepl);
+        bda.addPostPass(ifrepl.getPostPass());
+        sketch.compiler.passes.bidirectional.RemoveFunctionParameters rfp = new sketch.compiler.passes.bidirectional.RemoveFunctionParameters();
+        bda.addPass(rfp);
+        bda.addPostPass(rfp.getPostPass());
+        prog = bda.doProgram(prog);
+        prog = (Program) prog.accept(new ThreadClosure(rfp, ifrepl));
+        prog = (Program) prog.accept(lamelim.getCleanup());
+        if (!tchk.good) {
+            throw new ProgramParseException("Semantic check failed");
         }
 
 
@@ -580,9 +567,9 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
         prog = preprocessProgram(prog, true); // perform prereq
 
         return nonnull(prog);
-	}
+    }
 
-	@CompilerPassDeps(runsBefore = {}, runsAfter = {})
+    @CompilerPassDeps(runsBefore = {}, runsAfter = {})
     public class SemanticCheckPass extends FEReplacer {
         private final ParallelCheckOption checkopt;
         protected final boolean isParseCheck;
@@ -612,7 +599,7 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
         this.log(1, "Benchmark = " + this.benchmarkName());
         Program prog = null;
         try {
-			prog = parseProgram();
+            prog = parseProgram();
             // System.out.println(prog);
         } catch (SketchException se) {
             throw se;
@@ -638,42 +625,42 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
             return;
         }
 
-		prog = this.preprocAndSemanticCheck(prog);
+        prog = this.preprocAndSemanticCheck(prog);
         // System.out.println(prog);
 
         // withoutConstsReplaced =
         // prog =
         // (new LowerToHLC(varGen, options)).visitProgram(withoutConstsReplaced);
 
-		SynthesisResult synthResult = this.partialEvalAndSolve(prog);
-		prog = synthResult.lowered.result;
+        SynthesisResult synthResult = this.partialEvalAndSolve(prog);
+        prog = synthResult.lowered.result;
 
-		Program finalCleaned = synthResult.lowered.highLevelC;
-		
+        Program finalCleaned = synthResult.lowered.highLevelC;
+
         // (Program) (new
         // DeleteInstrumentCalls()).visitProgram(synthResult.lowered.highLevelC);
 
-		// finalCleaned.debugDump("After final Cleaned");
+        // finalCleaned.debugDump("After final Cleaned");
 
         // beforeUnvectorizing =
         // (Program) (new DeleteCudaSyncthreads()).visitProgram(beforeUnvectorizing);
         Program substituted;
         if (synthResult.solution != null) {
             substituted =
- (new SubstituteSolution(varGen, options,
-					synthResult.solution)).visitProgram(finalCleaned);
+                    (new SubstituteSolution(varGen, options,
+                            synthResult.solution)).visitProgram(finalCleaned);
         } else {
             substituted = finalCleaned;
         }
-        
+
 
 
         Program substitutedCleaned =
- (new CleanupFinalCode(varGen, options,
-				visibleRControl(finalCleaned))).visitProgram(substituted);
+                (new CleanupFinalCode(varGen, options,
+                        visibleRControl(finalCleaned))).visitProgram(substituted);
 
 
-		generateCode(substitutedCleaned);
+        generateCode(substitutedCleaned);
         this.log(1, "[SKETCH] DONE");
     }
 
@@ -710,7 +697,7 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
                     executor.shutdown();
                 }
             } else { // normal run
-            // System.out.println("Running");
+                // System.out.println("Running");
                 sketchmain.run();
                 // System.out.println("End run");
             }
