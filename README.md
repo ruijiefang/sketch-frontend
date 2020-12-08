@@ -5,6 +5,12 @@ This is a final project for COS516 Fall '20 at Princeton Unviersity by Ruijie Fa
 <br>
 MinDepthSketch is a tool based on the Sketch program synthesizer front-end to enable sharing of common subexpressions in the outputs returned by multi-output program specifications. All the user needs to supply is a file containing the program specifications, another file containing the generators describing the output grammar, and the maximum number of shared common subexpressions `k`, which, for achieving practical synthesis performance on small test cases, should be a value in range `1...8`. The tool will then output the final, optimized program in Sketch code.
 
+### Directly downloading the release
+
+A release may be found at <a href="https://cs.princeton.edu/~ruijief/MinDepthSketch/sketch-1.7.6.tar">this link.</a> Simply download and extract the tarball, and proceed with the steps outlined in the **Usages** section.
+
+Examples in the **Usages** section, like `simpleSpec.sk` and `grammar.sk`, can be found in the root directory of the release.
+
 ### Compiling from scratch
 
 Place this folder under a parent folder named `sketch/`. Then clone the Sketch backend solver (source copy available at `https://github.com/ruijiefang/sketch-backend`) into a location under the same parent folder. The folder hierarchy should look like:
