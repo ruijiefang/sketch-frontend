@@ -1,0 +1,71 @@
+struct tempVar { int temp; }
+struct tempBitVar { bit temp; }
+
+generator int expr(fun vars, fun bool_vars, int bnd) {
+  assert bnd >= 0;
+  int t = ??(3);
+  if (t == 0) {
+    return vars();
+  }
+  if (t == 1) {
+    return ??;
+  }
+  if (t == 2) {
+    return -??;
+  }
+  if (t == 3) {
+    return ite_expr(vars, bool_vars, bnd);
+  } else {
+    tempVar tmp = new tempVar();
+    tmp.temp = {| expr(vars, bool_vars, bnd-1) (+ | -) expr(vars, bool_vars, bnd-1) |};
+    return tmp.temp;
+  }
+}
+
+generator int ite_expr(fun vars, fun bool_vars, int bnd) {
+  assert bnd >= 0;
+  return {| bool_expr(vars, bool_vars, bnd-1) ? expr(vars, bool_vars, bnd-1) : expr(vars, bool_vars, bnd-1) |};
+}
+
+generator bit rel_expr(fun vars, fun bool_vars, int bnd) {
+  assert bnd >= 0;
+  int t = ??(2);
+  if (t == 0) {
+    return 0;
+  }
+  if (t == 1) {
+    return 1;
+  }
+  if (t == 2) {
+    assert bnd >= 1;
+    tempBitVar tmp = new tempBitVar();
+    tmp.temp = {| (vars()|??|-??) (== | != | < | >=) (vars()|??|-??) |};
+    return tmp.temp;
+  } else {
+    tempBitVar tmp = new tempBitVar();
+    tmp.temp = {| expr(vars, bool_vars, bnd-1) (== | != | < | >=) expr(vars, bool_vars, bnd-1)|};
+    return tmp.temp;
+  }
+}
+
+generator bit bool_expr(fun vars, fun bool_vars, int bnd) {
+  assert bnd >= 0;
+  int t = ??(2);
+  if (t == 0) {
+    return bool_vars();
+  }
+  if (t == 1) {
+    return rel_expr(vars, bool_vars, bnd);
+  }
+  if (t == 2) {
+    tempBitVar tmp = new tempBitVar();
+    tmp.temp = bool_expr(vars, bool_vars, bnd-1) & bool_expr(vars, bool_vars, bnd-1);
+    return tmp.temp;
+  } else {
+    tempBitVar tmp = new tempBitVar();
+    tmp.temp = bool_expr(vars, bool_vars, bnd-1) | bool_expr(vars, bool_vars, bnd-1);
+    return tmp.temp;
+  }
+}
+
+

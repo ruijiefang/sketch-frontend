@@ -530,6 +530,7 @@ public class BidirectionalAnalysis extends SymbolTableVisitor {
         int actSz = exp.getParams().size();
         int formSz = f.getParams().size();
         if (actSz > formSz) {
+            System.out.println("ERR: Incorrect number of parameters, expression is " + exp);
             throw new ExceptionAtNode("Incorrect number of parameters", exp);
         }
         int implSz = formSz - actSz;

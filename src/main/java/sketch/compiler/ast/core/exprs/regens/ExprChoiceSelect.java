@@ -96,7 +96,6 @@ public class ExprChoiceSelect extends Expression {
 
 		public Selector getThis () { return ths; }
 		public Selector getThat () { return that; }
-
 		public String toString () {
 			return "("+ ths +" | "+ that +")"+ (optional ? "?" : "");
 		}

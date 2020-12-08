@@ -310,11 +310,15 @@ public class ExprStar extends Expression
             return "**/*" + getSname() /* + (exprMax == null ? "" : "@" + exprMax) */
                     + "*/";
         } else {
-            if (getType() != null) {
-                return "??" + "/* " + getSname() + getType() + ":" + size + " */";
-            } else {
-                return "??" + "/*" + getSname() + "*/";
-            }
+            if (size > 1)
+                return "??" + "(" + size + ")";
+            else
+                return "??";
+           // if (getType() != null) {
+           // return "??" + "(" + size + ")"; // + "/* " + getSname() + getType() + ":" + size + " */";
+           // } else {
+           //     return "??" + "/*" + getSname() + "*/";
+           // }
         }
 
     }

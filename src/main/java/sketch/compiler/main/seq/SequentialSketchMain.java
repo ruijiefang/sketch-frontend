@@ -110,6 +110,8 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
         super(new SketchOptions(args));
     }
 
+    public SequentialSketchMain(){}
+
 	/** for subclasses */
     public SequentialSketchMain(SketchOptions options) {
         super(options);
@@ -502,22 +504,28 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
                         !options.solverOpts.unoptimized, options.bndOpts.arrSize,
                         options.bndOpts.srcTupleDepth));
         // prog.debugDump();
-
+        System.out.println("After CREATE HARNESS: " + prog);
         prog = (Program) prog.accept(new ConstantReplacer(null));
-
+        System.out.println("After CONSTANT REPLACER: " + prog);
 
         prog = (Program) prog.accept(new MinimizeFcnCall());
+        System.out.println("After FuncCall Minimizer: " + prog);
 
         prog = (Program) prog.accept(new SpmdbarrierCall());
+        System.out.println("After Spmd: " + prog);
 
         prog = (Program) prog.accept(new PidReplacer());
+        System.out.println("After PidReplacer: " + prog);
 
 		prog = (Program) prog.accept(new ExtractComplexLoopConditions(varGen));
+        System.out.println("After LoopConditions: " + prog);
 
-		prog = (Program) prog.accept(new ExpressionCastingReplacer());
+		//prog = (Program) prog.accept(new ExpressionCastingReplacer());
+        //System.out.println("After CastingReplacer: " + prog);
 
 
 		prog = (Program) prog.accept(new LocalVariablesReplacer(varGen));
+        System.out.println("After LocalVarsReplacer: " + prog);
 
         
         // prog.debugDump("********************************************* Before
@@ -527,10 +535,15 @@ public class SequentialSketchMain extends CommonSketchMain implements Runnable
 		// These three passes need to be integrated into the Bidirectional
 		// framework.
 		prog = (Program) prog.accept(new ExpandRepeatCases());
-		prog = (Program) prog.accept(new EliminateListOfFieldsMacro());
-		prog = (Program) prog.accept(new EliminateEmptyArrayLen());
+        System.out.println("After ExpandRepeatCases: " + prog);
 
-		BidirectionalAnalysis bda = new BidirectionalAnalysis(varGen);
+        prog = (Program) prog.accept(new EliminateListOfFieldsMacro());
+        System.out.println("After EliminateFieldsMacro: " + prog);
+
+        prog = (Program) prog.accept(new EliminateEmptyArrayLen());
+        System.out.println("After EliminateEmptyArrayLen: " + prog);
+
+        BidirectionalAnalysis bda = new BidirectionalAnalysis(varGen);
 		TypeCheck tchk = new TypeCheck();
 		bda.addPass(tchk);
 		bda.addPostPass(tchk.getPostPass());

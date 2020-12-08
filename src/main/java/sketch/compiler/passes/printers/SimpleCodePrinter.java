@@ -46,7 +46,7 @@ public class SimpleCodePrinter extends CodePrinter
 	{
 		if(outtags && func.getTag() != null){ out.println("T="+func.getTag()); }
 		printTab(); 
-		out.println("/*" + func.getCx() + "*/");
+		//out.println("/*" + func.getCx() + "*/");
 		printTab();
         for (Entry<String, Vector<Annotation>> anitv : func.annotationSet()) {
             for (Annotation anit : anitv.getValue()) {

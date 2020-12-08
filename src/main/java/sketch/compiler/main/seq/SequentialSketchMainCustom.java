@@ -14,13 +14,16 @@ import sketch.compiler.main.seq.mindepthUtils.ComponentArguments;
 import sketch.compiler.main.seq.mindepthUtils.ComponentArgumentsHoisting;
 import sketch.compiler.main.seq.mindepthUtils.SCP;
 import sketch.compiler.parser.RegenParser;
+import sketch.compiler.passes.printers.CodePrinterVisitor;
 import sketch.util.exceptions.SketchException;
+
+import java.io.PrintWriter;
 import java.util.*;
 import java.util.concurrent.*;
 
 public class SequentialSketchMainCustom {
 
-    public static final String MANGLE_HARNESS = "_sketch_harness_";
+    public static final String MANGLE_HARNESS = "custom_cos516_sketch_";
     public static boolean isTest = false;
 
     //
@@ -105,19 +108,23 @@ public class SequentialSketchMainCustom {
         // Yes, this is not a generic approach. We need to think of a better
         // approach, like using annotations. But for now, this'll do.
         private boolean isTarget(StmtBlock stmt) {
-            boolean criterion = stmt.getStmts().size() == 3;
-            criterion = criterion && (stmt.getStmts().get(0) instanceof StmtVarDecl);
+            boolean criterion = stmt.getStmts().size() >= 3;
             if (criterion) {
-                StmtVarDecl stmt1 = (StmtVarDecl) stmt.getStmts().get(0);
-                criterion = (stmt1.getNames().size()==1) && (stmt1.getName(0).equals("tmp"));
-                criterion = criterion && (stmt.getStmts().get(1) instanceof StmtAssign);
-                return criterion;
+                List<Statement> stmts = stmt.getStmts().subList(stmt.getStmts().size() - 3, stmt.getStmts().size());
+                criterion = (stmts.get(0) instanceof StmtVarDecl);
+                if (criterion) {
+                    StmtVarDecl stmt1 = (StmtVarDecl) stmts.get(0);
+                    criterion = (stmt1.getNames().size() == 1) && (stmt1.getName(0).equals("tmp"));
+                    criterion = criterion && (stmts.get(1) instanceof StmtAssign);
+                    return criterion;
+                } else return false;
             } else return false;
         }
 
         private Expression hoistRhs(StmtBlock stmt) {
-            assert stmt.getStmts().size()==3;
-            Statement stmt2 = stmt.getStmts().get(1);
+            assert stmt.getStmts().size()>=3;
+            List<Statement> stmts = stmt.getStmts().subList(stmt.getStmts().size() - 3, stmt.getStmts().size());
+            Statement stmt2 = stmts.get(1);
             assert stmt2 instanceof StmtAssign;
             StmtAssign aStmt = (StmtAssign) stmt2;
             return aStmt.getRHS();
@@ -125,10 +132,10 @@ public class SequentialSketchMainCustom {
 
         @Override
         public Object visitStmtBlock(StmtBlock stmt) {
-            System.out.println("MemoizeTemporaries: doing " + stmt);
+            //System.out.println("MemoizeTemporaries: doing {{{{{{{{{{{{{{{{" + stmt + "}}}}}}}}}}}}}}}}");
             boolean good = isTarget(stmt);
             System.out.println("is it a target? " + good);
-            if (!good) return stmt;
+            if (!good) return super.visitStmtBlock(stmt);
             // is target. now replace entire block with a StmtAssign and StmtReturn.
             String memoName = this.rty == TypePrimitive.inttype ? "memoInt" : "memoBit";
             ExprStar choiceHole = new ExprStar(stmt, 0, k, (int) (Math.ceil(Math.log(k)/Math.log(2))));
@@ -194,6 +201,7 @@ public class SequentialSketchMainCustom {
 
         @Override
         public Object visitExprFunCall(ExprFunCall exp) {
+            if (exp.getName().equals("vars") || exp.getName().equals("bool_vars")) return super.visitExprFunCall(exp);
             List<Expression> newParams = new ArrayList<Expression>();
             newParams.addAll(exp.getParams());
             newParams.addAll(this.expressionsToAdd);
@@ -220,9 +228,10 @@ public class SequentialSketchMainCustom {
         @Override
         public Object visitPackage(Package spec) {
             if (!spec.getName().equals(this.packageName)) return spec;
+            System.out.println("AddGlobalVariablesToPackage:  adding" + newFieldsToAdd.size() + " vars to package " + this.packageName);
             List<FieldDecl> decls = new ArrayList<>();
-            decls.addAll(spec.getVars());
             decls.addAll(this.newFieldsToAdd);
+            decls.addAll(spec.getVars());
             return new Package(spec, spec.getName(), spec.getStructs(), decls, spec.getFuncs(), spec.getSpAsserts());
         }
     }
@@ -246,13 +255,18 @@ public class SequentialSketchMainCustom {
                 argsStr.append("|");
             ++i;
         }
+        if (args.size()==0)
+            argsStr.append("0|1");
         System.out.println(" makeSelector: argsStr is: " + argsStr.toString());
         return new ExprRegen(ctx, RegenParser.parse(argsStr.toString()));
     }
 
-    static StmtReturn makeSelectorReturn(FENode ctx, List<String> args) {
+    static StmtBlock makeSelectorReturn(FENode ctx, List<String> args) {
+        // Even if it's a single statement, we wrap it inside a StmtBlock for syntactical well-formedness.
+        List<Statement> l = new ArrayList<>();
         ExprRegen returnRhs = makeSelector(ctx, args);
-        return new StmtReturn(ctx, returnRhs);
+        l.add(new StmtReturn(ctx, returnRhs));
+        return new StmtBlock(ctx, l);
     }
 
     static Function mkGenerator(FENode ctx, String pkg, String name, Type rty, List<String> args) {
@@ -270,6 +284,7 @@ public class SequentialSketchMainCustom {
         List<Type> arrType = new ArrayList<>();
         List<String> name = new ArrayList<>();
         List emptyList = new ArrayList();
+        emptyList.add(null);
         arrType.add(new TypeArray(t, new ExprConstInt(k)));
         if (t.equals(TypePrimitive.inttype))
             name.add("memoInt");
@@ -333,9 +348,8 @@ public class SequentialSketchMainCustom {
         ExprFunCall lhsCallExpr = new ExprFunCall(ctx, funcName, lhsParams);
         ExprFunCall rhsCallExpr = new ExprFunCall(ctx, spec.componentName, rhsParams);
         for (int i = 0; i < len; ++i) {
-            ExprArrayRange dimILHS = new ExprArrayRange(lhsCallExpr, new ExprConstInt(ctx, i));
             ExprArrayRange dimIRHS = new ExprArrayRange(rhsCallExpr, new ExprConstInt(ctx, i));
-            ExprBinary lhsRhsDimIEQ = new ExprBinary(ctx, ExprBinary.BINOP_EQ, dimILHS, dimIRHS);
+            ExprBinary lhsRhsDimIEQ = new ExprBinary(ctx, ExprBinary.BINOP_EQ, lhsCallExpr, dimIRHS);
             StmtAssert dimIAssert = new StmtAssert(ctx, lhsRhsDimIEQ, false);
             listOfAsserts.add(dimIAssert);
         }
@@ -366,10 +380,12 @@ public class SequentialSketchMainCustom {
         System.out.println("Parsing components...");
         Program componentsProg = (new ParseProgramStage(varGenComponents, componentsOption.options)).visitProgram(null);
         Program grammarProg = (new ParseProgramStage(varGenGrammar, grammarOption.options)).visitProgram(null);
+        componentsProg.accept(new SCP());
         System.out.println(" --------------- Components Program ---------------");
         System.out.println(componentsProg.toString());
         System.out.println(" --------------- Grammar Program ------------------");
         System.out.println(grammarProg.toString());
+        grammarProg.accept(new SCP());
         System.out.println(" --------------------------------------------------");
         System.out.println("Analyzing each component...");
         ComponentArguments componentArgs = (ComponentArguments) componentsProg.accept(new ComponentArgumentsHoisting());
@@ -379,17 +395,6 @@ public class SequentialSketchMainCustom {
             throw new Exception("Error: Grammar Program contains more than one package: " + grammarProg.getPackages().size());
         if (componentsProg.getPackages().size() > 1)
             throw new Exception("Error: Components Program contains more than one packages: " + componentsProg.getPackages().size());
-        System.out.println(" Components SCP--------------------------------------------------++");
-        componentsProg.accept(new SCP());
-        System.out.println(" Testing Regen parser-----------------------------------------------------++");
-        List<String> rArgs = new ArrayList<String>();
-        rArgs.add("a");
-        rArgs.add("b");
-        rArgs.add("qwerty");
-        rArgs.add("c");
-        ExprRegen r = makeSelector(componentsProg.getOrigin(), rArgs);
-        System.out.println("made regen: " + r.toString());
-        System.out.println(" | expression value: " + r.getExpr().toString());
         ArrayList<Function> componentFuncs = new ArrayList<>();
         for (ComponentArguments.ArgInComponent comp : componentArgs) {
             componentFuncs.add(comp.component);
@@ -402,6 +407,8 @@ public class SequentialSketchMainCustom {
         memoArrs.add(makeMemoArray(TypePrimitive.inttype, grammarProg.getOrigin(), k));
         memoArrs.add(makeMemoArray(TypePrimitive.bittype, grammarProg.getOrigin(), k));
         grammarProg = (Program) grammarProg.accept(new AddGlobalVariablesToPackage(grammarPkg, memoArrs));
+        System.out.println("grammar program after adding memo arrays: " + grammarProg);
+        System.out.println("------------------------------------------------------end SCP");
         /* Add parameter to memo arrays in grammar file. */
         List<Parameter> memoParams = new ArrayList<>();
         memoParams.add(makeMemoArrayParam(grammarProg.getOrigin(), TypePrimitive.inttype, k));
@@ -412,7 +419,7 @@ public class SequentialSketchMainCustom {
         /* Memoize existing temporaries in the file. */
         grammarProg = (Program) grammarProg.accept(new MemoizeTemporaries(k));
         /* Append components to the grammar file. */
-        grammarProg.accept(new AppendFunctions(componentFuncs, componentsProg.getPackages().get(0).getName()));
+        grammarProg = (Program) grammarProg.accept(new AppendFunctions(componentFuncs, grammarProg.getPackages().get(0).getName()));
         System.out.println("Grammar Program: Before inserting harness ------------------");
         System.out.println(grammarProg.toString());
         System.out.println("----------------------- Inserting harness ------------------");
@@ -426,6 +433,10 @@ public class SequentialSketchMainCustom {
                     intArgs.add(par.getName());
                 else
                     throw new Exception("Error: Cannot accept a component that accepts anything other than int/bit.");
+            }
+            for(int i = 0; i < k; ++i) {
+                intArgs.add("memoInt[" + i + "]");
+                bitArgs.add("memoBit[" + i + "]");
             }
             ArrayList<Statement> stmts = new ArrayList<>();
             Function gInt = mkGenerator(componentProgramNode, componentPkg, "vars", TypePrimitive.inttype, intArgs);
@@ -443,6 +454,7 @@ public class SequentialSketchMainCustom {
             }
             Function harness = makeHarness(componentProgramNode)
                     .name(MANGLE_HARNESS + comp.componentName)
+                    .params(comp.componentArgs)
                     .returnType(comp.rty)
                     .body(new StmtBlock(grammarProg.getOrigin(), stmts)).create();
             harnesses.add(harness);
@@ -450,7 +462,12 @@ public class SequentialSketchMainCustom {
         System.out.println("Now actually adding all the harnesses.");
         grammarProg = (Program) grammarProg.accept(new AppendFunctions(harnesses, grammarPkg));
         System.out.println("Grammar Program: Final form: ----------------------------------------------");
-        System.out.println(grammarProg.toString());
+        System.out.println(grammarProg);
+        System.out.println("Number of functions: "+ grammarProg.getPackages().get(0));
+        grammarProg.debugDump();
+        //SequentialSketchMain NM = new SequentialSketchMain(new String[]{"nonExistent.sk"});
+        //System.out.println(" Is preprocessing successful? ");
+        //NM.preprocAndSemanticCheck(grammarProg);
     }
 
 }

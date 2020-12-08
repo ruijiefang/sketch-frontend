@@ -1,0 +1,8 @@
+int[3] polyexpr_constraint(int x, int y, int z) {
+  int a = x*y*z*z+z;
+  int b = x*y*z*z+x;
+  int c = x*y*z;
+  return {a, b, c};
+}
+
+

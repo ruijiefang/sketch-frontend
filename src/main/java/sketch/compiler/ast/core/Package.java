@@ -47,6 +47,9 @@ public class Package extends FENode
 
     public String toString(){
         String res = "package " + name + '\n';
+        for (FieldDecl v : vars) {
+            res += "   " + v.toString() + "\n";
+        }
         for (StructDef ts : structs) {
             res += "   struct " + ts.getName() + '\n';
         }

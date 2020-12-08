@@ -35,7 +35,8 @@ public class ExprAlt extends Expression {
 	}
 
 	public String toString () {
-		return "("+ ths +" | "+ that +")";
+		//return "ExprAlt" + "("+ ths +" | "+ that +")";
+		return " " + ths + " | " + that + " ";
 	}
 
 	@Override

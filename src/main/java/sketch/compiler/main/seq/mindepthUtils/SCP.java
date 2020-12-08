@@ -12,6 +12,7 @@ import java.io.PrintWriter;
 import sketch.compiler.ast.core.*;
 import sketch.compiler.ast.core.Package;
 import sketch.compiler.ast.core.exprs.*;
+import sketch.compiler.ast.core.exprs.regens.ExprParen;
 import sketch.compiler.ast.core.exprs.regens.ExprRegen;
 import sketch.compiler.passes.printers.CodePrinter;
 import sketch.compiler.ast.core.Function.LibraryFcnType;
@@ -142,5 +143,12 @@ public class SCP extends FEReplacer
     public Object visitStmtVarDecl(StmtVarDecl stmt) {
         System.out.println("SCP: Visit statement VarDecl: " + stmt.toString());
         return super.visitStmtVarDecl(stmt);
+    }
+
+    @Override
+    public Object visitExprParen(ExprParen exp) {
+        System.out.println("SCP: Visit ExprChoice binary: " + exp.toString());
+        System.out.println(" | subexpression: " + exp.getExpr());
+        return super.visitExprParen(exp);
     }
 }
